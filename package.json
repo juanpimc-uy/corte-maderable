@@ -1,0 +1,13 @@
+{
+  "name": "corte-maderable",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Optimizador de corte -> G-code NEPOTIS + etiquetas Datamax para Maderable",
+  "type": "module",
+  "scripts": {
+    "dev": "echo 'TBD: definir tras aprobar deps'",
+    "test": "echo 'TBD: definir tras aprobar deps'"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

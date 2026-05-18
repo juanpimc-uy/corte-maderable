@@ -1,0 +1,14 @@
+Programa Fase 0 — posiciones generadas por el optimizer
+=====================================================
+
+Tablero: 1000 × 600 mm, espesor 25.4 mm
+Refilado: 15 mm — separación entre piezas: 14 mm
+Fresa T001 Ø12 — RPM 18000
+Z seguro 44 / Z retiro bajo 22 / Z tope 25.4 / Z pasante 0
+Feeds: corte 7999.2 · plunge 4000 · retracción 500
+
+Piezas (x,y son la esquina inferior-izquierda en mm desde origen G54):
+  SQ    200× 200  en X=   15.0  Y=   15.0  (Cuadrado)
+  HX    400×  60  en X=   15.0  Y=  229.0  (Sentido X)
+  VY     60× 300  en X=  429.0  Y=   15.0  (Sentido Y)
+  REF   100×  80  en X=  229.0  Y=   15.0  (Ref origen)

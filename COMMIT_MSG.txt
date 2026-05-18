@@ -1,0 +1,29 @@
+feat: scaffold corte-maderable — optimizer NEPOTIS + UI + Fase 0
+
+Industrialización de maqueta-gcode-nepotis-v3.html en app web estática
++ funciones serverless de Vercel.
+
+- src/core/optimizer.js: migración 1:1 del MaxRects + Skyline-BL + multi-start
+  + eliminate, verificada byte-a-byte contra fixture de la maqueta.
+- src/core/gcode.js: generador del dialecto NEPOTIS — ISO/Fanuc, CRLF, T001,
+  G54, G43, M30. Igual byte-a-byte a la maqueta.
+- src/core/validate.js: salvaguarda — tablero menor o igual a 3000x2000,
+  ningún Z menor a 0. Bloquea descarga si el G-code generado se sale de mesa.
+- UI: 4 pestañas con paleta Maderable, MRP cascada Cliente/Proyecto,
+  import Excel SheetJS, print batch de etiquetas y planos de nesting,
+  pager touch-friendly en pestaña Etiquetas para tablet.
+- api/cortes.js + db/001_init.sql: historial básico en Supabase.
+  SQL se ejecuta manualmente, no automático.
+- fase0/: programa de air-cut + checklist firmable.
+- installers/: .bat para PC planta con --kiosk-printing y .command Mac.
+- tests/: smoke + diff byte-a-byte vs maqueta v3.
+- docs/: alcance, GCODE-NEPOTIS, DPL-DATAMAX, SETUP-PLANTA.
+
+Pendientes humanos antes de producción:
+- Air-cut en Fase 0.
+- Pegar SUPABASE_URL y ANON_KEY en public/js/config.js.
+- Correr db/001_init.sql en Supabase de maderable-produccion.
+- Configurar env vars en Vercel.
+- Setup PC planta con installers/launch-planta-windows.bat.
+
+Refs: ALCANCE-optimizador-corte-NEPOTIS.md

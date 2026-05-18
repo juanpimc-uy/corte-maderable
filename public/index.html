@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Optimizador → G-code NEPOTIS · Maderable</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Saira+Condensed:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+<header>
+  <div class="row"><h1>Optimizador → G-code</h1><span class="badge">NEPOTIS · T001 Ø12 · MDF</span><span class="badge warn" id="envBadge">FASE 0 PENDIENTE</span></div>
+</header>
+<div class="tabs">
+  <button id="t-job" class="on" onclick="tab('job')">1 · Trabajo</button>
+  <button id="t-par" onclick="tab('par')">2 · Parámetros 🔒</button>
+  <button id="t-res" onclick="tab('res')" disabled>3 · Resultado</button>
+  <button id="t-lbl" onclick="tab('lbl')" disabled>4 · Etiquetas</button>
+</div>
+
+<div class="wrap">
+
+<!-- ===================== TAB 1 TRABAJO ===================== -->
+<div id="vJob" class="view on">
+  <div class="card">
+    <div class="h"><span class="ic">T</span><h2>Trabajo</h2><span id="mrpStatus" class="muted mono" style="font-size:11px"></span></div>
+    <div class="b">
+      <div id="mrpBanner" class="disc hide" style="margin-bottom:12px"></div>
+      <div class="grid g3">
+        <div>
+          <label>Cliente</label>
+          <select id="cliSel" class="hide"><option value="">— Cliente —</option></select>
+          <input  id="cli" placeholder="Cliente">
+        </div>
+        <div>
+          <label>Proyecto</label>
+          <select id="proySel" class="hide" disabled><option value="">— Proyecto —</option></select>
+          <input  id="proy" placeholder="Proyecto">
+        </div>
+        <div><label>Material</label><input id="mat" value="MDF"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="h"><span class="ic">▦</span><h2>Tablero que estamos trabajando</h2></div>
+    <div class="b">
+      <div class="grid g4">
+        <div><label>Medida de tablero</label><select id="sheetSel" onchange="onSheetSel()"></select></div>
+        <div><label>Espesor (mm)</label><input id="thick" type="number" value="18" step="0.1"></div>
+        <div style="grid-column:span 2"><label>&nbsp;</label>
+          <div class="bar">
+            <button class="act btn-ghost btn-sm" onclick="toggleAddSheet()">+ Agregar medida manual</button>
+            <span id="sheetInfo" class="mono muted" style="font-size:12px"></span>
+          </div>
+        </div>
+      </div>
+      <div id="addSheet" class="hide" style="margin-top:12px">
+        <div class="grid g4" style="align-items:end">
+          <div><label>Largo X (mm)</label><input id="nsW" type="number" placeholder="2750"></div>
+          <div><label>Ancho Y (mm)</label><input id="nsH" type="number" placeholder="1830"></div>
+          <div><button class="act btn-accent btn-sm" onclick="addSheet()" style="width:100%">Agregar y usar</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="h"><span class="ic">≣</span><h2>Despiece</h2><span class="muted mono" style="font-size:11px" id="pc">0 piezas</span></div>
+    <div class="b">
+      <div class="bar" style="margin-bottom:11px">
+        <button class="act btn-ghost btn-sm" onclick="addP()">+ Pieza</button>
+        <button class="act btn-ghost btn-sm" onclick="sample()">Cargar ejemplo</button>
+        <button class="act btn-ghost btn-sm" onclick="document.getElementById('xlsxInput').click()">↥ Importar Excel</button>
+        <input type="file" id="xlsxInput" accept=".xlsx,.xls" class="hide" onchange="onXlsx(this)">
+      </div>
+      <div style="overflow-x:auto"><table id="tbl"><thead><tr>
+        <th>Código</th><th>Largo</th><th>Ancho</th><th>Cant</th><th>Veta</th><th>Descripción <span style="font-weight:400;text-transform:none">(opcional)</span></th><th></th>
+      </tr></thead><tbody></tbody></table></div>
+      <button class="act btn-accent" onclick="doOptimize()" style="margin-top:15px;padding:12px 34px;font-size:16px">▶ Optimizar</button>
+      <span class="muted" style="font-size:12px;margin-left:12px">Primero optimizás y revisás. El G-code se genera después de confirmar.</span>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== TAB 2 PARÁMETROS ===================== -->
+<div id="vPar" class="view">
+  <div class="disc"><b class="ok">Parámetros fijos de máquina y proceso.</b> Confirmados con tus programas de T01 (datum Z, 1 pasada pasante, vacío sin tabs, dialecto NEPOTIS). Vienen <b>bloqueados</b> para que nadie los cambie sin querer en producción.</div>
+  <div class="lock">
+    <span class="pad" id="padIco">🔒</span>
+    <span id="lockMsg">Bloqueado. Estos valores no deberían tocarse en el día a día.</span>
+    <button class="act btn-ghost btn-sm" id="lockBtn" onclick="toggleLock()">Editar parámetros</button>
+  </div>
+  <div class="card">
+    <div class="h"><span class="ic">⌖</span><h2>Fresa y nesting</h2></div>
+    <div class="b"><div class="grid g4 pfield">
+      <div><label>Ø fresa T001 (mm)</label><input id="bit" type="number" value="12" step="0.5"></div>
+      <div><label>Separación piezas (mm)</label><input id="space" type="number" value="14"><small class="h">≥ Ø fresa</small></div>
+      <div><label>Refilado borde (mm)</label><input id="trim" type="number" value="15"></div>
+      <div><label>RPM husillo</label><input id="rpm" type="number" value="18000"></div>
+    </div></div>
+  </div>
+  <div class="card">
+    <div class="h"><span class="ic">↧</span><h2>Corte (datum Z y feeds)</h2></div>
+    <div class="b">
+      <div class="grid g5 pfield">
+        <div><label>Z seguro</label><input id="zsafe" type="number" value="44"></div>
+        <div><label>Z retiro bajo</label><input id="zclear" type="number" value="22"></div>
+        <div><label>Z tope material</label><input id="ztop" type="number" value="25.4" step="0.1"></div>
+        <div><label>Z pasante</label><input id="zthru" type="number" value="0" step="0.1"></div>
+        <div><label>Estrategia</label><select id="strat"><option value="single">1 pasada pasante</option><option value="multi">Multipasada Z</option></select></div>
+      </div>
+      <div class="grid g5 pfield" style="margin-top:11px">
+        <div><label>Prof./pasada</label><input id="pdep" type="number" value="9" step="0.5"><small class="h">solo multipasada</small></div>
+        <div><label>Lead-in rampa</label><input id="lead" type="number" value="15"></div>
+        <div><label>Feed corte</label><input id="fcut" type="number" value="7999.2" step="0.1"></div>
+        <div><label>Feed plunge</label><input id="fplg" type="number" value="4000"></div>
+        <div><label>Feed retrac.</label><input id="fret" type="number" value="500"></div>
+      </div>
+      <div class="grid g5 pfield" style="margin-top:11px">
+        <div><label>Tabs auto</label><select id="tabsAuto"><option value="1" selected>Sí — piezas chicas</option><option value="0">No</option></select></div>
+        <div><label>Umbral tabs (mm)</label><input id="tabsThr" type="number" value="200"><small class="h">si algún lado &lt; este valor</small></div>
+        <div><label>Tabs/pieza</label><input id="tabn" type="number" value="0"><small class="h">forzar manual; 0 = usa auto</small></div>
+        <div><label>Largo tab</label><input id="tabl" type="number" value="20"></div>
+        <div><label>Alto tab</label><input id="tabh" type="number" value="4" step="0.5"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== TAB 3 RESULTADO ===================== -->
+<div id="vRes" class="view">
+  <div id="kpi" class="kpi-row"></div>
+  <div class="pager">
+    <button class="act btn-ghost nav" onclick="pageBoard(-1)">‹</button>
+    <span class="now" id="boardNow">Tablero 1 / 1</span>
+    <button class="act btn-ghost nav" onclick="pageBoard(1)">›</button>
+    <div class="thumbs" id="thumbs"></div>
+  </div>
+  <div class="bigsvg" id="bigwrap"></div>
+
+  <div id="preConfirm" class="confirmbar">
+    <div class="t"><b>Revisá el nesting de todos los tableros</b><span>Pasá entre tableros con ‹ › o las miniaturas. Cuando esté OK, confirmás y se genera el G-code.</span></div>
+    <button class="act btn-accent" onclick="confirmGen()" style="padding:13px 28px;font-size:16px">✓ Confirmar y generar G-code</button>
+  </div>
+
+  <div id="gcArea" class="card hide">
+    <div class="h"><span class="ic">⚙</span><h2>G-code generado — <span id="gcBoardLbl">Tablero 1</span></h2>
+      <div class="bar">
+        <button class="act btn-ghost btn-sm" onclick="dl()">↧ G-code este tablero</button>
+        <button class="act btn-ghost btn-sm" onclick="dlAll()">↧ G-code todos los tableros</button>
+        <button class="act btn-ghost btn-sm" onclick="printAllLabels()">🖨 Todas las etiquetas</button>
+        <button class="act btn-ghost btn-sm" onclick="printNestingPlans()">🖨 Planos de nesting</button>
+        <span id="saveStatus" class="mono muted" style="font-size:11px;margin-left:auto"></span>
+      </div>
+    </div>
+    <div class="b"><textarea class="gcode" id="gc" readonly spellcheck="false"></textarea></div>
+  </div>
+</div>
+
+<!-- ===================== TAB 4 ETIQUETAS ===================== -->
+<div id="vLbl" class="view">
+  <div class="disc">Modo tablet para el taller. <b>Tocá la pieza que estás sacando del tablero</b> y aparece su etiqueta para imprimir, sin pasos intermedios. La pieza tocada queda marcada como hecha para no repetir.</div>
+  <div class="toolbar tablet-pager">
+    <button class="act btn-accent nav-big" onclick="pageBoardL(-1)" aria-label="Tablero anterior">‹</button>
+    <span class="now big" id="boardNowL">Tablero 1 / 1</span>
+    <button class="act btn-accent nav-big" onclick="pageBoardL(1)" aria-label="Tablero siguiente">›</button>
+    <span class="muted mono" style="font-size:13px;margin-left:auto" id="lblProg">0 / 0 etiquetadas</span>
+    <button class="act btn-ghost btn-sm" onclick="resetLbls()">Reiniciar marcas</button>
+  </div>
+  <div class="tbl-svg" id="lblwrap"></div>
+</div>
+
+</div>
+
+<!-- overlay etiqueta -->
+<div class="lblovl" id="ovl" onclick="closeOvl()">
+  <div class="lblcard" id="lblcard" onclick="event.stopPropagation()">
+    <div class="top"><span id="ol_job"></span><span id="ol_n"></span></div>
+    <div class="nm" id="ol_desc"></div>
+    <div class="dim" id="ol_dim"></div>
+    <div class="mt" id="ol_meta"></div>
+  </div>
+  <div class="hint">Tocá fuera de la etiqueta para volver al tablero</div>
+  <div class="note">En producción la PC de planta arranca Chrome con <code>--kiosk-printing</code> y la Datamax como impresora default — del toque a la impresión, sin cuadro intermedio. Ver installers/.</div>
+</div>
+
+<!-- Contenedor de impresión batch (oculto en pantalla, visible solo en print). -->
+<div id="printPanel"></div>
+
+<!-- Config pública (Supabase URL + ANON_KEY del MRP Maderable) -->
+<script src="/js/config.js"></script>
+<!-- SheetJS para import Excel (CDN) -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script type="module" src="/src/app.js"></script>
+</body>
+</html>
