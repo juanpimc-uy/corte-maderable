@@ -363,7 +363,6 @@ function doOptimize() {
   GCs = []; SETs = []; LBLDONE = {}; bIdx = 0; bIdxL = 0;
   $('gcArea').classList.add('hide'); $('preConfirm').style.display = 'flex';
   $('t-res').disabled = false; $('t-lbl').disabled = false;
-  $('bd').textContent = OPT.bit;
   renderKPI(); renderThumbs(); renderBig(); renderLblBoard(); tab('res');
 }
 
