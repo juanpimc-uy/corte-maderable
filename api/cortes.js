@@ -34,6 +34,10 @@ function envReady() {
   return Boolean(SUPABASE_URL && SERVICE_KEY);
 }
 
+// Las tablas viven en el schema `corte` (no en public). PostgREST necesita
+// que se lo digamos via Accept-Profile (GET) o Content-Profile (POST/PATCH).
+const SCHEMA = process.env.CORTES_SCHEMA || 'corte';
+
 function supaHeaders(extra = {}) {
   return {
     'apikey': SERVICE_KEY,
@@ -72,7 +76,7 @@ export default async function handler(req, res) {
     try {
       const r = await fetch(
         `${SUPABASE_URL}/rest/v1/cortes_listado?select=*&order=created_at.desc&limit=${limit}`,
-        { headers: supaHeaders() }
+        { headers: supaHeaders({ 'Accept-Profile': SCHEMA }) }
       );
       if (!r.ok) return bad(res, r.status, 'supabase_get_failed', { detail: await r.text() });
       const rows = await r.json();
@@ -113,7 +117,10 @@ export default async function handler(req, res) {
     try {
       const r = await fetch(`${SUPABASE_URL}/rest/v1/cortes`, {
         method: 'POST',
-        headers: supaHeaders({ 'Prefer': 'return=representation' }),
+        headers: supaHeaders({
+          'Prefer': 'return=representation',
+          'Content-Profile': SCHEMA,
+        }),
         body: JSON.stringify(row),
       });
       if (!r.ok) return bad(res, r.status, 'supabase_insert_failed', { detail: await r.text() });
