@@ -15,9 +15,17 @@
 function getCfg() {
   const c = window.MRP_CONFIG;
   if (!c) return null;
-  if (!c.SUPABASE_URL || c.SUPABASE_URL.startsWith('PEGAR_AQUI')) return null;
-  if (!c.SUPABASE_ANON_KEY || c.SUPABASE_ANON_KEY.startsWith('PEGAR_AQUI')) return null;
+  if (!c.SUPABASE_URL || !c.SUPABASE_ANON_KEY) return null;
   return c;
+}
+
+// La config ahora viene async desde /api/config (cargado por public/js/config.js).
+// Esperamos a que la promesa resuelva antes de declarar el MRP configurado.
+export async function waitForConfig() {
+  if (window.MRP_CONFIG_PROMISE) {
+    try { await window.MRP_CONFIG_PROMISE; } catch (_) {}
+  }
+  return getCfg();
 }
 
 export function mrpConfigured() {

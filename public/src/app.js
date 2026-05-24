@@ -22,7 +22,7 @@
 import { optimize } from './core/optimizer.js';
 import { genGcode, genSet } from './core/gcode.js';
 import { SHEETS as SHEETS_INIT } from './data/sheets.js';
-import { mrpConfigured, listClientes, listProyectos } from './core/mrp.js';
+import { mrpConfigured, listClientes, listProyectos, waitForConfig } from './core/mrp.js';
 import { NEPOTIS_LIMITS, validateSheet, validateAllGcodes, formatViolations } from './core/validate.js';
 
 // ===== estado global =====
@@ -189,11 +189,14 @@ function showMrpBanner(msgHtml) {
 }
 
 async function initMRP() {
+  setMrpStatus('Cargando config…');
+  // /api/config trae URL + ANON_KEY desde env vars de Vercel.
+  await waitForConfig();
   if (!mrpConfigured()) {
     setMrpStatus('MRP no configurado · texto libre', 'err');
     showMrpBanner(
-      '<b class="no">MRP no configurado.</b> Pegá la URL y ANON_KEY en ' +
-      '<code>public/js/config.js</code>. Mientras tanto, Cliente y Proyecto van como texto libre.'
+      '<b class="no">MRP no configurado.</b> Falta SUPABASE_URL y/o SUPABASE_ANON_KEY ' +
+      'en las env vars de Vercel. Mientras tanto, Cliente y Proyecto van como texto libre.'
     );
     return;
   }
@@ -455,15 +458,30 @@ function svgBoard(b, big, opts) {
       const fsDim  = big ? 12 : 9.5;
       const fsDesc = big ? 11 : 9;
       const desc = (p.desc || '').trim();
-      const showDesc = !!desc && pxH > 50;
+      // ↔ siempre indica la dimensión horizontal en pantalla (p.w),
+      // ↕ siempre la vertical (p.h). El optimizer ya rotó la pieza, así
+      // que estos números son las medidas reales en mm en la orientación
+      // que la pieza tendrá sobre el tablero.
+      const dimH = '↔ ' + p.w;
+      const dimV = '↕ ' + p.h;
+      const showDesc = !!desc && pxH > 80;
+      const showSeparateDims = pxH > 55;
       if (showDesc) {
-        // tres líneas: code arriba, dim centro, desc abajo
+        // cuatro líneas: code, ↔W, ↕H, desc
+        const baseY = cy - fsCode - 3;
+        s += '<text x="' + cx + '" y="' + baseY + '" text-anchor="middle" font-family="IBM Plex Mono" font-size="' + fsCode + '" font-weight="600" fill="' + C.textPrim + '">' + p.code + (done ? ' ✓' : '') + '</text>';
+        s += '<text x="' + cx + '" y="' + (baseY + fsCode + 2) + '" text-anchor="middle" font-family="IBM Plex Mono" font-size="' + fsDim + '" fill="' + C.textSec + '">' + dimH + '</text>';
+        s += '<text x="' + cx + '" y="' + (baseY + fsCode + fsDim + 4) + '" text-anchor="middle" font-family="IBM Plex Mono" font-size="' + fsDim + '" fill="' + C.textSec + '">' + dimV + '</text>';
+        s += '<text x="' + cx + '" y="' + (baseY + fsCode + fsDim * 2 + 8) + '" text-anchor="middle" font-family="DM Sans, IBM Plex Sans" font-size="' + fsDesc + '" fill="' + C.textSec + '">' + truncateForSvg(desc, pxW, fsDesc) + '</text>';
+      } else if (showSeparateDims) {
+        // tres líneas: code, ↔W, ↕H
         s += '<text x="' + cx + '" y="' + (cy - fsDim) + '" text-anchor="middle" font-family="IBM Plex Mono" font-size="' + fsCode + '" font-weight="600" fill="' + C.textPrim + '">' + p.code + (done ? ' ✓' : '') + '</text>';
-        s += '<text x="' + cx + '" y="' + cy + '" text-anchor="middle" font-family="IBM Plex Mono" font-size="' + fsDim + '" fill="' + C.textSec + '">' + p.w + '×' + p.h + '</text>';
-        s += '<text x="' + cx + '" y="' + (cy + fsCode + 2) + '" text-anchor="middle" font-family="DM Sans, IBM Plex Sans" font-size="' + fsDesc + '" fill="' + C.textSec + '">' + truncateForSvg(desc, pxW, fsDesc) + '</text>';
+        s += '<text x="' + cx + '" y="' + (cy + 2) + '" text-anchor="middle" font-family="IBM Plex Mono" font-size="' + fsDim + '" fill="' + C.textSec + '">' + dimH + '</text>';
+        s += '<text x="' + cx + '" y="' + (cy + fsDim + 4) + '" text-anchor="middle" font-family="IBM Plex Mono" font-size="' + fsDim + '" fill="' + C.textSec + '">' + dimV + '</text>';
       } else {
+        // dos líneas compactas: code, "↔W  ↕H"
         s += '<text x="' + cx + '" y="' + (cy - 2) + '" text-anchor="middle" font-family="IBM Plex Mono" font-size="' + fsCode + '" font-weight="600" fill="' + C.textPrim + '">' + p.code + (done ? ' ✓' : '') + '</text>';
-        s += '<text x="' + cx + '" y="' + (cy + fsCode) + '" text-anchor="middle" font-family="IBM Plex Mono" font-size="' + fsDim + '" fill="' + C.textSec + '">' + p.w + '×' + p.h + '</text>';
+        s += '<text x="' + cx + '" y="' + (cy + fsCode) + '" text-anchor="middle" font-family="IBM Plex Mono" font-size="' + fsDim + '" fill="' + C.textSec + '">' + dimH + '  ' + dimV + '</text>';
       }
     }
   });
@@ -483,7 +501,7 @@ function escapeSvg(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 function renderBig() {
-  $('bigwrap').innerHTML = svgBoard(RES.boards[bIdx], true);
+  $('bigwrap').innerHTML = svgBoard(RES.boards[bIdx], true, { showDims: true });
   $('boardNow').textContent = 'Tablero ' + (bIdx + 1) + ' / ' + RES.boards.length;
   renderThumbs();
   if (GCs.length) { $('gc').value = GCs[bIdx]; $('gcBoardLbl').textContent = 'Tablero ' + (bIdx + 1); }
@@ -699,7 +717,7 @@ async function saveCorte(opts) {
 
 // ===== etiquetas tablet =====
 function renderLblBoard() {
-  $('lblwrap').innerHTML = svgBoard(RES.boards[bIdxL], 'lbl');
+  $('lblwrap').innerHTML = svgBoard(RES.boards[bIdxL], 'lbl', { showDims: true });
   $('boardNowL').textContent = 'Tablero ' + (bIdxL + 1) + ' / ' + RES.boards.length;
   document.querySelectorAll('#lblwrap rect.pc').forEach(el => {
     const h = () => openLbl(el.getAttribute('data-n'));
