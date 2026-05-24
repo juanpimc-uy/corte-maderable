@@ -683,7 +683,8 @@ async function saveCorte(opts) {
   const payload = {
     cliente: OPT.cli,
     proyecto: OPT.proy,
-    cliente_id:  OPT.cliId  ?? null,
+    // El MRP de Maderable no tiene tabla clientes — `cliente` es texto del proyecto.
+    // Solo persistimos proyecto_id (text) que apunta a public.proyectos_cache(id).
     proyecto_id: OPT.proyId ?? null,
     material: OPT.mat,
     espesor: SHEET.thick,

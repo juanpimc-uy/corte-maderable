@@ -99,8 +99,9 @@ export default async function handler(req, res) {
     const row = {
       cliente:     body.cliente.trim(),
       proyecto:    body.proyecto.trim(),
-      cliente_id:  body.cliente_id  == null ? null : body.cliente_id,
-      proyecto_id: body.proyecto_id == null ? null : body.proyecto_id,
+      // proyecto_id es text (apunta a public.proyectos_cache.id). cliente_id
+      // ya no existe — el MRP no tiene tabla clientes separada.
+      proyecto_id: body.proyecto_id == null ? null : String(body.proyecto_id),
       material:    body.material.trim(),
       espesor:     body.espesor == null ? null : Number(body.espesor),
       tableros:    body.tableros,
