@@ -384,9 +384,20 @@ function renderThumbs() {
     '<button class="' + (i === bIdx ? 'on' : '') + '" onclick="gotoBoard(' + i + ')">T' + (i + 1) + '</button>'
   ).join('');
 }
-function svgBoard(b, big) {
-  const W = SHEET.w, H = SHEET.h, r = OPT.bit / 2, pad = 14, vw = big ? 900 : 560, sc = (vw - pad * 2) / W, vh = H * sc + pad * 2;
-  const X = v => pad + v * sc, Y = v => pad + (H - v) * sc;
+// opts: { showDims: true }  → agrega cotas del tablero (largo arriba, ancho a la izquierda).
+//                              Solo se usa en el plano impreso, no en la UI.
+function svgBoard(b, big, opts) {
+  opts = opts || {};
+  const showDims = opts.showDims === true;
+  const W = SHEET.w, H = SHEET.h, r = OPT.bit / 2, pad = 14;
+  const boardW = big ? 900 : 560;        // ancho útil para dibujar el tablero
+  const extraTop  = showDims ? 32 : 0;    // espacio para cota X arriba
+  const extraLeft = showDims ? 36 : 0;    // espacio para cota Y a la izquierda
+  const sc = (boardW - pad * 2) / W;
+  const vw = boardW + extraLeft;
+  const vh = H * sc + pad * 2 + extraTop;
+  const X = v => extraLeft + pad + v * sc;
+  const Y = v => extraTop + pad + (H - v) * sc;
   // Colores: tablero blanco con borde negro, piezas en gris claro.
   const C = {
     boardFill:  '#ffffff',
@@ -397,9 +408,38 @@ function svgBoard(b, big) {
     trajStr:    '#d9480f',   // trayectoria centro fresa (naranja)
     textPrim:   '#15130f',
     textSec:    '#555555',
+    dimStr:     '#15130f',
   };
   let s = '<svg viewBox="0 0 ' + vw + ' ' + vh + '" preserveAspectRatio="xMidYMid meet">';
-  s += '<rect x="' + pad + '" y="' + pad + '" width="' + (W * sc) + '" height="' + (H * sc) + '" fill="' + C.boardFill + '" stroke="' + C.boardStr + '" stroke-width="1.5"/>';
+  s += '<rect x="' + X(0) + '" y="' + Y(H) + '" width="' + (W * sc) + '" height="' + (H * sc) + '" fill="' + C.boardFill + '" stroke="' + C.boardStr + '" stroke-width="1.5"/>';
+
+  // ----- Cotas del tablero (solo plano impreso) -----
+  if (showDims) {
+    const x0 = X(0), x1 = X(W), y0 = Y(0), y1 = Y(H);
+    // Cota X (largo) arriba
+    const xLineY = extraTop - 12;
+    s += '<line x1="' + x0 + '" y1="' + xLineY + '" x2="' + x1 + '" y2="' + xLineY + '" stroke="' + C.dimStr + '" stroke-width="0.7"/>';
+    s += '<line x1="' + x0 + '" y1="' + (xLineY - 4) + '" x2="' + x0 + '" y2="' + (xLineY + 4) + '" stroke="' + C.dimStr + '" stroke-width="0.7"/>';
+    s += '<line x1="' + x1 + '" y1="' + (xLineY - 4) + '" x2="' + x1 + '" y2="' + (xLineY + 4) + '" stroke="' + C.dimStr + '" stroke-width="0.7"/>';
+    // Tick verticales hasta el tablero (líneas auxiliares finas)
+    s += '<line x1="' + x0 + '" y1="' + xLineY + '" x2="' + x0 + '" y2="' + y1 + '" stroke="' + C.dimStr + '" stroke-width="0.3" stroke-dasharray="2,2"/>';
+    s += '<line x1="' + x1 + '" y1="' + xLineY + '" x2="' + x1 + '" y2="' + y1 + '" stroke="' + C.dimStr + '" stroke-width="0.3" stroke-dasharray="2,2"/>';
+    const xMid = (x0 + x1) / 2;
+    s += '<rect x="' + (xMid - 38) + '" y="' + (xLineY - 8) + '" width="76" height="14" fill="#ffffff"/>';
+    s += '<text x="' + xMid + '" y="' + xLineY + '" text-anchor="middle" dominant-baseline="middle" font-family="IBM Plex Mono" font-size="11" font-weight="600" fill="' + C.dimStr + '">' + W + ' mm</text>';
+
+    // Cota Y (ancho) a la izquierda, rotada
+    const yLineX = extraLeft - 14;
+    s += '<line x1="' + yLineX + '" y1="' + y0 + '" x2="' + yLineX + '" y2="' + y1 + '" stroke="' + C.dimStr + '" stroke-width="0.7"/>';
+    s += '<line x1="' + (yLineX - 4) + '" y1="' + y0 + '" x2="' + (yLineX + 4) + '" y2="' + y0 + '" stroke="' + C.dimStr + '" stroke-width="0.7"/>';
+    s += '<line x1="' + (yLineX - 4) + '" y1="' + y1 + '" x2="' + (yLineX + 4) + '" y2="' + y1 + '" stroke="' + C.dimStr + '" stroke-width="0.7"/>';
+    s += '<line x1="' + yLineX + '" y1="' + y0 + '" x2="' + x0 + '" y2="' + y0 + '" stroke="' + C.dimStr + '" stroke-width="0.3" stroke-dasharray="2,2"/>';
+    s += '<line x1="' + yLineX + '" y1="' + y1 + '" x2="' + x0 + '" y2="' + y1 + '" stroke="' + C.dimStr + '" stroke-width="0.3" stroke-dasharray="2,2"/>';
+    const yMid = (y0 + y1) / 2;
+    s += '<rect x="' + (yLineX - 7) + '" y="' + (yMid - 38) + '" width="14" height="76" fill="#ffffff"/>';
+    s += '<text x="' + yLineX + '" y="' + yMid + '" text-anchor="middle" dominant-baseline="middle" font-family="IBM Plex Mono" font-size="11" font-weight="600" fill="' + C.dimStr + '" transform="rotate(-90 ' + yLineX + ' ' + yMid + ')">' + H + ' mm</text>';
+  }
+
   b.parts.forEach(p => {
     const done = big === 'lbl' && LBLDONE[p.code];
     s += '<rect class="pc" data-n="' + p.code + '" x="' + X(p.x) + '" y="' + Y(p.y + p.h) + '" width="' + (p.w * sc) + '" height="' + (p.h * sc) + '" fill="' + (done ? C.pieceDone : C.pieceFill) + '" stroke="' + C.pieceStr + '" stroke-width="1"/>';
@@ -547,16 +587,17 @@ function printAllLabels() {
   printBatch(sheets.join(''));
 }
 
-// Logo Maderable como SVG inline (hex + wordmark). Tinta sólida para que
-// imprima bien en cualquier impresora B&N o color. Sin dependencias externas.
+// Logo Maderable como SVG inline — solo wordmark, tinta sólida negra.
+// Tamaño chico por default (16px de alto). Imprime limpio en B&N o color.
+//
+// Si en algún momento se agrega el SVG oficial al repo (ej. public/assets/maderable-logo.svg),
+// reemplazar esta función por algo como:
+//   return '<img src="/assets/maderable-logo.svg" height="' + h + '" alt="Maderable">';
 function maderableLogoSvg(height) {
-  const h = height || 30;
-  // Hexágono regular (apuntando arriba), centrado a la izquierda.
-  // El path está calculado para un viewBox de 200×40, escalable.
+  const h = height || 16;
   return (
-    '<svg class="ml-logo" viewBox="0 0 200 40" height="' + h + '" preserveAspectRatio="xMinYMid meet" xmlns="http://www.w3.org/2000/svg">' +
-      '<polygon points="22,4 36,12 36,28 22,36 8,28 8,12" fill="none" stroke="#15130f" stroke-width="2.5" stroke-linejoin="round"/>' +
-      '<text x="48" y="28" font-family="Saira Condensed, sans-serif" font-weight="800" font-size="28" fill="#15130f" letter-spacing="0.5">MADERABLE</text>' +
+    '<svg class="ml-logo" viewBox="0 0 180 30" height="' + h + '" preserveAspectRatio="xMinYMid meet" xmlns="http://www.w3.org/2000/svg">' +
+      '<text x="0" y="23" font-family="Saira Condensed, sans-serif" font-weight="800" font-size="26" fill="#15130f" letter-spacing="1.5">MADERABLE</text>' +
     '</svg>'
   );
 }
@@ -580,9 +621,9 @@ function printNestingPlans() {
     ).join('');
     return (
       '<div class="print-nest-sheet">' +
-        '<div class="brand">' + maderableLogoSvg(28) + '</div>' +
         '<div class="hdr">' +
           '<div class="h-l">' +
+            '<div class="brand">' + maderableLogoSvg(16) + '</div>' +
             '<h1>' + escapeHtml(OPT.proy || '(sin proyecto)') + '</h1>' +
             '<div class="sub">' +
               escapeHtml(OPT.cli || '(sin cliente)') + ' · ' +
@@ -593,7 +634,7 @@ function printNestingPlans() {
           '</div>' +
           '<div class="h-r">Tablero ' + b.n + ' / ' + RES.boards.length + '</div>' +
         '</div>' +
-        svgBoard(b, true) +
+        svgBoard(b, true, { showDims: true }) +
         '<table class="pcs">' +
           '<thead><tr><th>Código</th><th>Descripción</th><th>L (mm)</th><th>A (mm)</th><th>X</th><th>Y</th></tr></thead>' +
           '<tbody>' + piezas + '</tbody>' +
