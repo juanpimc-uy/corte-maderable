@@ -763,9 +763,84 @@ for (const k of Object.keys(exposes)) window[k] = exposes[k];
 // como referencia viva en window:
 Object.defineProperty(window, 'PCS', { get: () => PCS, set: v => { PCS = v; } });
 
+// ===== Cargar un corte desde el historial =====
+// Si la URL trae ?corte=N, traemos el corte completo de /api/cortes?id=N
+// e hidratamos todo el estado (despiece, parámetros, tableros, G-code).
+async function loadCorteFromUrl() {
+  const id = new URLSearchParams(location.search).get('corte');
+  if (!id) return false;
+  setMrpStatus('Cargando trabajo #' + id + '…');
+  try {
+    const r = await fetch('/api/cortes?id=' + encodeURIComponent(id));
+    if (!r.ok) { setMrpStatus('No pude cargar trabajo #' + id, 'err'); return false; }
+    const data = await r.json();
+    const row = data.row;
+    if (!row) { setMrpStatus('Trabajo #' + id + ' no encontrado', 'err'); return false; }
+
+    // Hidratamos OPT, SHEET, PCS, RES desde el payload
+    OPT = row.parametros || {};
+    OPT.cli   = row.cliente  || OPT.cli  || '';
+    OPT.proy  = row.proyecto || OPT.proy || '';
+    OPT.mat   = row.material || OPT.mat  || 'MDF';
+    OPT.proyId = row.proyecto_id || null;
+    // SHEET viene del primer tablero (todos comparten dimensiones en un trabajo)
+    const tableros = row.tableros || [];
+    if (!tableros.length) { setMrpStatus('Trabajo sin tableros', 'err'); return false; }
+    SHEET = { w: tableros[0].w || tableros[0].sheet?.w || 0, h: tableros[0].h || tableros[0].sheet?.h || 0, thick: row.espesor };
+    // Fallback: la geometría del SHEET puede estar en OPT.parametros o derivarse de
+    // la pieza más grande contenida. Si no la encontramos, usamos el sheet selector.
+    if (!SHEET.w || !SHEET.h) {
+      // Reconstruimos a partir de las medidas máximas vistas en piezas
+      let maxX = 0, maxY = 0;
+      for (const b of tableros) for (const p of (b.parts || b.pl || [])) {
+        maxX = Math.max(maxX, (p.x || 0) + (p.w || 0));
+        maxY = Math.max(maxY, (p.y || 0) + (p.h || 0));
+      }
+      SHEET.w = SHEET.w || Math.ceil(maxX + 15);  // + refilado
+      SHEET.h = SHEET.h || Math.ceil(maxY + 15);
+    }
+    PCS = (row.piezas || []).map(p => ({
+      cod: p.cod, largo: p.largo, ancho: p.ancho, qty: p.qty, veta: p.veta, desc: p.desc || '',
+    }));
+    // RES: si el row.tableros ya tiene la estructura {n, parts}, lo usamos directo.
+    // Si tiene {pl} (formato original del optimizer), lo mapeamos.
+    RES = {
+      minB: tableros.length,
+      boards: tableros.map((b, i) => {
+        const parts = (b.parts || b.pl || []).map(p => ({
+          code: p.code || p.cod, desc: p.desc || (p.piece && p.piece.desc) || '',
+          x: p.x, y: p.y, w: p.w, h: p.h,
+        }));
+        return { n: i + 1, parts };
+      }),
+      un: [],
+    };
+
+    renderP();
+    GCs = RES.boards.map(b => genGcode(b.parts, SHEET, OPT, b.n));
+    SETs = RES.boards.map(b => genSet(OPT, SHEET, b.parts, b.n));
+    LBLDONE = {}; bIdx = 0; bIdxL = 0;
+    $('t-res').disabled = false; $('t-lbl').disabled = false;
+    $('preConfirm').style.display = 'none';
+    $('gcArea').classList.remove('hide');
+    renderKPI(); renderThumbs(); renderBig(); renderLblBoard(); tab('res');
+    $('gc').value = GCs[bIdx]; $('gcBoardLbl').textContent = 'Tablero ' + (bIdx + 1);
+    setMrpStatus('Trabajo #' + id + ' cargado desde historial', 'ok');
+    // Indicador visual también en la barra:
+    setTimeout(() => {
+      const ss = $('saveStatus');
+      if (ss) { ss.textContent = '💾 Guardado · #' + id; ss.style.color = 'var(--ok)'; }
+    }, 100);
+    return true;
+  } catch (e) {
+    setMrpStatus('Error al cargar #' + id + ': ' + e.message, 'err');
+    return false;
+  }
+}
+
 // ===== init =====
 fillSheets(0);
 applyLock();
-sample();
 initMRP();   // async — popula clientes/proyectos del Supabase de maderable-produccion
              // si los hay; si no, muestra banner y deja los inputs de texto.
+loadCorteFromUrl();  // si hay ?corte=N en la URL, hidratamos desde historial.

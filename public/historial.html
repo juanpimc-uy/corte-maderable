@@ -13,7 +13,9 @@
   .hist-table { width:100%; border-collapse:collapse; font-size:13px; color:var(--text); }
   .hist-table th { font-family:"Saira Condensed", sans-serif; font-weight:700; text-transform:uppercase; font-size:11px; text-align:left; padding:10px 8px; border-bottom:2px solid var(--accent); color:var(--text-dim); background:var(--surface); position:sticky; top:0; }
   .hist-table td { padding:8px; border-bottom:1px solid var(--border-soft); font-family:"IBM Plex Mono", monospace; }
-  .hist-table tr:hover td { background:var(--surface); }
+  .hist-table tbody tr { cursor:pointer; }
+  .hist-table tbody tr:hover td { background:var(--surface); }
+  .hist-table tbody tr:hover td:first-child { color:var(--accent); }
   .hist-table .id { color:var(--accent); font-weight:600; }
   .hist-table .date { color:var(--text-dim); font-size:12px; }
   .hist-table .num { text-align:right; }
@@ -114,7 +116,7 @@ function renderTable(rows) {
     '</tr></thead><tbody>';
   for (const r of rows) {
     const fecha = r.created_at ? new Date(r.created_at).toLocaleString('es-UY', { dateStyle: 'short', timeStyle: 'short' }) : '';
-    s += '<tr>' +
+    s += '<tr onclick="openCorte(' + (r.id ?? 'null') + ')" title="Abrir trabajo en el optimizador">' +
       '<td class="id">#' + (r.id ?? '') + '</td>' +
       '<td class="date">' + escapeHtml(fecha) + '</td>' +
       '<td>' + escapeHtml(r.cliente || '') + '</td>' +
@@ -128,6 +130,12 @@ function renderTable(rows) {
   }
   s += '</tbody></table>';
   return s;
+}
+
+function openCorte(id) {
+  if (id == null) return;
+  // Navegamos al optimizador con el id como query param. app.js detecta y hidrata.
+  location.href = '/?corte=' + id;
 }
 
 function escapeHtml(s) {

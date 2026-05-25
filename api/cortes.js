@@ -72,6 +72,23 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     const u = new URL(req.url, 'http://x');  // base falsa, solo para parsear query
+    const id = u.searchParams.get('id');
+    // Caso A: ?id=N  → trae el corte COMPLETO con jsonbs (para "abrir trabajo")
+    if (id) {
+      try {
+        const r = await fetch(
+          `${SUPABASE_URL}/rest/v1/cortes?select=*&id=eq.${encodeURIComponent(id)}&limit=1`,
+          { headers: supaHeaders({ 'Accept-Profile': SCHEMA }) }
+        );
+        if (!r.ok) return bad(res, r.status, 'supabase_get_failed', { detail: await r.text() });
+        const rows = await r.json();
+        if (!rows.length) return bad(res, 404, 'not_found');
+        return res.status(200).json({ row: rows[0] });
+      } catch (e) {
+        return bad(res, 500, 'fetch_error', { detail: e.message });
+      }
+    }
+    // Caso B: lista resumida (sin jsonbs pesados) — para /historial.html
     const limit = Math.min(200, Math.max(1, parseInt(u.searchParams.get('limit') || '50', 10)));
     try {
       const r = await fetch(
