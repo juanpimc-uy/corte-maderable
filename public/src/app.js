@@ -23,10 +23,13 @@ import { optimize } from './core/optimizer.js';
 import { genGcode, genSet } from './core/gcode.js';
 import { SHEETS as SHEETS_INIT } from './data/sheets.js';
 import { mrpConfigured, listClientes, listProyectos, waitForConfig } from './core/mrp.js';
+import { listSheets, createSheet, updateSheet, archiveSheet } from './core/sheets-api.js';
 import { NEPOTIS_LIMITS, validateSheet, validateAllGcodes, formatViolations } from './core/validate.js';
 
 // ===== estado global =====
-const SHEETS = SHEETS_INIT.slice();         // permite agregar medidas en runtime
+// SHEETS empieza con los hardcodeados (fallback offline / dev local sin /api/sheets).
+// initSheets() los reemplaza con los de Supabase al cargar la app.
+let SHEETS = SHEETS_INIT.map((s, i) => ({ id: 'local-' + i, nombre: s[0] + '×' + s[1] + ' mm', w: s[0], h: s[1], is_default: i === 0 }));
 let PCS = [], OPT = null, SHEET = null, RES = null;
 let bIdx = 0, bIdxL = 0, GCs = [], SETs = [], LBLDONE = {};
 let LOCKED = true;
@@ -47,21 +50,137 @@ function tab(t) {
 
 // ===== selector de tableros =====
 function fillSheets(sel) {
+  // sel puede ser índice o id. Si no llega, usa el default o el primero.
+  const defaultIdx = (() => {
+    if (sel != null) {
+      const idx = SHEETS.findIndex(s => String(s.id) === String(sel));
+      if (idx >= 0) return idx;
+      const num = parseInt(sel, 10);
+      if (!Number.isNaN(num) && num >= 0 && num < SHEETS.length) return num;
+    }
+    const def = SHEETS.findIndex(s => s.is_default);
+    return def >= 0 ? def : 0;
+  })();
   $('sheetSel').innerHTML = SHEETS.map((s, i) =>
-    '<option value="' + i + '" ' + (i === (sel ?? 0) ? 'selected' : '') + '>' + s[0] + ' × ' + s[1] + ' mm</option>'
+    '<option value="' + i + '" ' + (i === defaultIdx ? 'selected' : '') + '>' +
+    escapeHtml(s.nombre) + '  (' + s.w + ' × ' + s.h + ' mm)' +
+    '</option>'
   ).join('');
   onSheetSel();
 }
 function onSheetSel() {
   const s = SHEETS[+$('sheetSel').value];
-  $('sheetInfo').textContent = 'Usando ' + s[0] + ' × ' + s[1] + ' mm';
+  if (!s) { $('sheetInfo').textContent = ''; return; }
+  $('sheetInfo').textContent = 'Usando ' + s.w + ' × ' + s.h + ' mm';
 }
-function toggleAddSheet() { $('addSheet').classList.toggle('hide'); }
-function addSheet() {
-  const w = +$('nsW').value, h = +$('nsH').value;
-  if (!(w > 0 && h > 0)) { alert('Ingresá largo y ancho.'); return; }
-  SHEETS.push([w, h]); fillSheets(SHEETS.length - 1);
-  $('addSheet').classList.add('hide'); $('nsW').value = ''; $('nsH').value = '';
+
+// Carga sheets desde Supabase. Si falla, deja los hardcoded de fallback.
+async function initSheets() {
+  const r = await listSheets(false);
+  if (!r.ok || !r.rows || !r.rows.length) {
+    console.warn('[sheets] usando fallback hardcoded:', r.error || r.detail || 'lista vacía');
+    return;
+  }
+  SHEETS = r.rows;
+  fillSheets();
+}
+
+// ===== Modal CRUD de tableros =====
+function openSheetsModal() {
+  $('sheetsModal').classList.add('on');
+  renderSheetsTable();
+}
+function closeSheetsModal() {
+  $('sheetsModal').classList.remove('on');
+}
+function setSheetsStatus(txt, tone) {
+  const el = $('sheetsModalStatus');
+  if (!el) return;
+  el.textContent = txt || '';
+  el.style.color = tone === 'ok' ? 'var(--ok)' : tone === 'err' ? 'var(--danger)' : '';
+}
+
+async function renderSheetsTable() {
+  setSheetsStatus('Cargando…');
+  const r = await listSheets(true);  // incluye inactivos así se ven los archivados
+  if (!r.ok) {
+    setSheetsStatus('Error: ' + (r.error || r.detail || 'desconocido'), 'err');
+    $('sheetsTable').querySelector('tbody').innerHTML =
+      '<tr><td colspan="5" style="padding:30px;text-align:center;color:var(--text-dim)">No pude cargar tableros del servidor.<br>Si estás en dev local, esto es esperado.</td></tr>';
+    return;
+  }
+  setSheetsStatus(r.rows.length + ' tableros', 'ok');
+  const tb = $('sheetsTable').querySelector('tbody');
+  tb.innerHTML = r.rows.map(s => `
+    <tr data-id="${s.id}" style="${s.active ? '' : 'opacity:.45'}">
+      <td style="padding:6px 4px"><input data-f="nombre" value="${escapeHtml(s.nombre)}" style="width:100%"></td>
+      <td style="padding:6px 4px"><input data-f="w" type="number" value="${s.w}" style="width:100%;text-align:right"></td>
+      <td style="padding:6px 4px"><input data-f="h" type="number" value="${s.h}" style="width:100%;text-align:right"></td>
+      <td style="padding:6px 4px;text-align:center"><input data-f="is_default" type="radio" name="defSheet" ${s.is_default ? 'checked' : ''}></td>
+      <td style="padding:6px 4px;text-align:right;white-space:nowrap">
+        <button class="act btn-ghost btn-sm" onclick="saveSheetRow(${s.id})">💾</button>
+        <button class="act btn-ghost btn-sm" onclick="archiveSheetRow(${s.id})" title="${s.active ? 'Archivar' : 'Ya archivado'}">${s.active ? '🗑' : '↺'}</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function readSheetRow(id) {
+  const tr = document.querySelector('#sheetsTable tr[data-id="' + id + '"]');
+  if (!tr) return null;
+  return {
+    nombre: tr.querySelector('input[data-f="nombre"]').value,
+    w: +tr.querySelector('input[data-f="w"]').value,
+    h: +tr.querySelector('input[data-f="h"]').value,
+    is_default: tr.querySelector('input[data-f="is_default"]').checked,
+  };
+}
+
+async function saveSheetRow(id) {
+  const row = readSheetRow(id);
+  if (!row) return;
+  if (!row.nombre.trim() || !row.w || !row.h) { alert('Nombre, largo y ancho son obligatorios.'); return; }
+  setSheetsStatus('Guardando…');
+  // Si marca este como default, primero desmarcamos al actual default
+  if (row.is_default) {
+    const all = await listSheets(true);
+    if (all.ok) {
+      for (const s of all.rows) {
+        if (s.is_default && String(s.id) !== String(id)) {
+          await updateSheet(s.id, { is_default: false });
+        }
+      }
+    }
+  }
+  const r = await updateSheet(id, row);
+  if (!r.ok) { setSheetsStatus('Error guardando: ' + (r.error || r.detail), 'err'); return; }
+  setSheetsStatus('Guardado #' + id, 'ok');
+  await renderSheetsTable();
+  await initSheets();  // refresca el dropdown del optimizador
+}
+
+async function archiveSheetRow(id) {
+  if (!confirm('¿Archivar este tablero? No se borra, solo deja de aparecer en el dropdown.')) return;
+  setSheetsStatus('Archivando…');
+  const r = await archiveSheet(id);
+  if (!r.ok) { setSheetsStatus('Error: ' + (r.error || r.detail), 'err'); return; }
+  setSheetsStatus('Archivado #' + id, 'ok');
+  await renderSheetsTable();
+  await initSheets();
+}
+
+async function addNewSheetFromModal() {
+  const nombre = $('newSheetNombre').value.trim();
+  const w = +$('newSheetW').value;
+  const h = +$('newSheetH').value;
+  if (!nombre || !w || !h) { alert('Completá nombre, largo y ancho.'); return; }
+  setSheetsStatus('Creando…');
+  const r = await createSheet({ nombre, w, h });
+  if (!r.ok) { setSheetsStatus('Error: ' + (r.error || r.detail), 'err'); return; }
+  setSheetsStatus('Creado #' + r.row.id, 'ok');
+  $('newSheetNombre').value = ''; $('newSheetW').value = ''; $('newSheetH').value = '';
+  await renderSheetsTable();
+  await initSheets();
 }
 
 // ===== candado de parámetros =====
@@ -304,6 +423,8 @@ function readOpt() {
     pdep: +$('pdep').value, lead: +$('lead').value,
     fcut: +$('fcut').value, fplg: +$('fplg').value, fret: +$('fret').value,
     tabn: +$('tabn').value, tabl: +$('tabl').value, tabh: +$('tabh').value,
+    origen: ($('origen') && $('origen').value) || 'BL',
+    minSheet: +($('minSheet') && $('minSheet').value) || 0,
   };
   // Capa "tabs auto": si tabn está en 0 Y el toggle auto está activo Y
   // alguna pieza tiene un lado < umbral, se levanta tabn a 2 (default).
@@ -318,6 +439,19 @@ function readOpt() {
 
 // ===== optimize → revisar → confirmar =====
 function doOptimize() {
+  // Validación: Proyecto es OBLIGATORIO. No dejamos generar G-code sin
+  // identificar el trabajo — evita perder trazabilidad.
+  const cp = readClienteProyecto();
+  if (!cp.proy || !cp.proy.trim()) {
+    alert('Tenés que identificar el PROYECTO antes de optimizar.\n\n' +
+      (MRP_OK
+        ? 'Elegí Cliente y Proyecto del MRP.'
+        : 'Escribí el nombre del proyecto en el campo Proyecto.'));
+    tab('job');
+    setTimeout(() => { const el = MRP_OK ? $('proySel') : $('proy'); if (el) el.focus(); }, 50);
+    return;
+  }
+
   const valid = [];
   PCS.forEach((p, i) => {
     if (+p.largo > 0 && +p.ancho > 0 && +p.qty > 0)
@@ -325,7 +459,15 @@ function doOptimize() {
   });
   if (!valid.length) { alert('Cargá piezas válidas (largo, ancho, cantidad).'); return; }
   const s = SHEETS[+$('sheetSel').value];
-  SHEET = { w: s[0], h: s[1], thick: +$('thick').value };
+  SHEET = { w: +s.w, h: +s.h, thick: +$('thick').value };
+
+  // Validar tamaño MÍNIMO de placa (parámetro en pestaña Parámetros)
+  const minSheet = +($('minSheet') && $('minSheet').value) || 0;
+  if (minSheet > 0 && (SHEET.w < minSheet || SHEET.h < minSheet)) {
+    alert('El tablero ' + SHEET.w + '×' + SHEET.h + ' mm es menor al mínimo permitido (' + minSheet + ' mm). ' +
+      'Cambialo en Parámetros si querés permitir tableros más chicos.');
+    return;
+  }
 
   // Validar que el tablero entre en la NEPOTIS antes de gastar tiempo optimizando.
   const sheetCheck = validateSheet(SHEET, NEPOTIS_LIMITS);
@@ -759,11 +901,12 @@ function closeOvl() { $('ovl').classList.remove('on'); renderLblBoard(); }
 // un módulo, exponemos explícitamente. Lo hacemos en un solo lugar para
 // que sea fácil ver qué entra al window.
 const exposes = {
-  PCS, tab, onSheetSel, toggleAddSheet, addSheet, toggleLock,
+  PCS, tab, onSheetSel, toggleLock,
   addP, renderP, sample, onXlsx, doOptimize,
   pageBoard, gotoBoard, confirmGen, dl, dlAll, saveCorte,
   printAllLabels, printNestingPlans,
   pageBoardL, resetLbls, openLbl, closeOvl,
+  openSheetsModal, closeSheetsModal, saveSheetRow, archiveSheetRow, addNewSheetFromModal,
 };
 for (const k of Object.keys(exposes)) window[k] = exposes[k];
 // PCS se accede mutable desde inline onchange/oninput, así que lo mantenemos
@@ -846,8 +989,8 @@ async function loadCorteFromUrl() {
 }
 
 // ===== init =====
-fillSheets(0);
+fillSheets();             // pinta el dropdown con los hardcodeados ya
 applyLock();
-initMRP();   // async — popula clientes/proyectos del Supabase de maderable-produccion
-             // si los hay; si no, muestra banner y deja los inputs de texto.
-loadCorteFromUrl();  // si hay ?corte=N en la URL, hidratamos desde historial.
+initMRP();                // async — popula clientes/proyectos del MRP en Supabase.
+initSheets();             // async — reemplaza SHEETS con los de Supabase si están.
+loadCorteFromUrl();       // si hay ?corte=N en la URL, hidratamos desde historial.

@@ -57,16 +57,9 @@
         <div><label>Espesor (mm)</label><input id="thick" type="number" value="18" step="0.1"></div>
         <div style="grid-column:span 2"><label>&nbsp;</label>
           <div class="bar">
-            <button class="act btn-ghost btn-sm" onclick="toggleAddSheet()">+ Agregar medida manual</button>
+            <button class="act btn-ghost btn-sm" onclick="openSheetsModal()">✎ Editar tableros</button>
             <span id="sheetInfo" class="mono muted" style="font-size:12px"></span>
           </div>
-        </div>
-      </div>
-      <div id="addSheet" class="hide" style="margin-top:12px">
-        <div class="grid g4" style="align-items:end">
-          <div><label>Largo X (mm)</label><input id="nsW" type="number" placeholder="2750"></div>
-          <div><label>Ancho Y (mm)</label><input id="nsH" type="number" placeholder="1830"></div>
-          <div><button class="act btn-accent btn-sm" onclick="addSheet()" style="width:100%">Agregar y usar</button></div>
         </div>
       </div>
     </div>
@@ -100,12 +93,23 @@
   </div>
   <div class="card">
     <div class="h"><span class="ic">⌖</span><h2>Fresa y nesting</h2></div>
-    <div class="b"><div class="grid g4 pfield">
-      <div><label>Ø fresa T001 (mm)</label><input id="bit" type="number" value="12" step="0.5"></div>
-      <div><label>Separación piezas (mm)</label><input id="space" type="number" value="14"><small class="h">≥ Ø fresa</small></div>
-      <div><label>Refilado borde (mm)</label><input id="trim" type="number" value="15"></div>
-      <div><label>RPM husillo</label><input id="rpm" type="number" value="18000"></div>
-    </div></div>
+    <div class="b">
+      <div class="grid g4 pfield">
+        <div><label>Ø fresa T001 (mm)</label><input id="bit" type="number" value="12" step="0.5"></div>
+        <div><label>Separación piezas (mm)</label><input id="space" type="number" value="14"><small class="h">≥ Ø fresa</small></div>
+        <div><label>Refilado borde (mm)</label><input id="trim" type="number" value="15"></div>
+        <div><label>RPM husillo</label><input id="rpm" type="number" value="18000"></div>
+      </div>
+      <div class="grid g4 pfield" style="margin-top:11px">
+        <div><label>Tamaño mín. placa (mm)</label><input id="minSheet" type="number" value="600"><small class="h">no se permite tablero menor</small></div>
+        <div style="grid-column:span 2"><label>Origen G54 (esquina datum)</label><select id="origen">
+          <option value="BL" selected>Inferior-izquierda (0,0 abajo-izq)</option>
+          <option value="BR">Inferior-derecha</option>
+          <option value="TL">Superior-izquierda</option>
+          <option value="TR">Superior-derecha</option>
+        </select><small class="h">a confirmar en Fase 0 air-cut</small></div>
+      </div>
+    </div>
   </div>
   <div class="card">
     <div class="h"><span class="ic">↧</span><h2>Corte (datum Z y feeds)</h2></div>
@@ -190,6 +194,35 @@
   </div>
   <div class="hint">Tocá fuera de la etiqueta para volver al tablero</div>
   <div class="note">En producción la PC de planta arranca Chrome con <code>--kiosk-printing</code> y la Datamax como impresora default — del toque a la impresión, sin cuadro intermedio. Ver installers/.</div>
+</div>
+
+<!-- Modal CRUD de tableros -->
+<div id="sheetsModal" class="lblovl" style="background:rgba(10,8,6,.85)">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:6px;width:min(820px,94vw);max-height:80vh;overflow:auto;padding:18px 22px;color:var(--text)">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:10px">
+      <h2 style="flex:1;font-size:18px;text-transform:uppercase;font-family:Saira Condensed,sans-serif">Tableros</h2>
+      <span id="sheetsModalStatus" class="muted mono" style="font-size:11px"></span>
+      <button class="act btn-ghost btn-sm" onclick="closeSheetsModal()">Cerrar</button>
+    </div>
+    <table id="sheetsTable" style="width:100%;font-size:13px">
+      <thead>
+        <tr>
+          <th style="text-align:left;padding:6px 4px;color:var(--text-dim);font-size:11px;text-transform:uppercase">Nombre</th>
+          <th style="text-align:right;padding:6px 4px;color:var(--text-dim);font-size:11px;text-transform:uppercase;width:80px">Largo</th>
+          <th style="text-align:right;padding:6px 4px;color:var(--text-dim);font-size:11px;text-transform:uppercase;width:80px">Ancho</th>
+          <th style="text-align:center;padding:6px 4px;color:var(--text-dim);font-size:11px;text-transform:uppercase;width:60px">Default</th>
+          <th style="width:90px"></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:end;flex-wrap:wrap">
+      <div style="flex:2"><label>Nombre nuevo</label><input id="newSheetNombre" placeholder="ej. MDF 18mm 2750×1830"></div>
+      <div style="width:100px"><label>Largo (mm)</label><input id="newSheetW" type="number" placeholder="2750"></div>
+      <div style="width:100px"><label>Ancho (mm)</label><input id="newSheetH" type="number" placeholder="1830"></div>
+      <div><button class="act btn-accent btn-sm" onclick="addNewSheetFromModal()">+ Agregar</button></div>
+    </div>
+  </div>
 </div>
 
 <!-- Contenedor de impresión batch (oculto en pantalla, visible solo en print). -->
