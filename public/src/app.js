@@ -104,15 +104,10 @@ function renderP() {
   $('pc').textContent = PCS.reduce((s, p) => s + (+p.qty || 0), 0) + ' piezas';
 }
 function sample() {
+  // Sample mínimo: una sola pieza para que el usuario tenga un punto de partida
+  // sin saturar la tabla. Si necesita más, agrega manualmente.
   PCS = [];
-  [
-    ['LAT', 800, 560, 8, true, 'Lateral mueble'],
-    ['EST', 900, 300, 12, false, 'Estante'],
-    ['FON', 1200, 500, 5, true, 'Fondo cajonera'],
-    ['DIV', 560, 520, 8, false, 'Divisor'],
-    ['TAP', 1810, 600, 4, true, 'Tapa'],
-    ['ZOC', 400, 300, 16, false, ''],
-  ].forEach(r => addP({ cod: r[0], largo: r[1], ancho: r[2], qty: r[3], veta: r[4], desc: r[5] }));
+  addP({ cod: 'LAT', largo: 800, ancho: 560, qty: 1, veta: true, desc: 'Lateral mueble' });
 }
 
 // ===== import Excel =====

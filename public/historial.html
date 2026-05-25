@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Historial · Optimizador NEPOTIS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Saira+Condensed:wght@500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+  /* Tabla de historial */
+  .hist-table { width:100%; border-collapse:collapse; font-size:13px; color:var(--text); }
+  .hist-table th { font-family:"Saira Condensed", sans-serif; font-weight:700; text-transform:uppercase; font-size:11px; text-align:left; padding:10px 8px; border-bottom:2px solid var(--accent); color:var(--text-dim); background:var(--surface); position:sticky; top:0; }
+  .hist-table td { padding:8px; border-bottom:1px solid var(--border-soft); font-family:"IBM Plex Mono", monospace; }
+  .hist-table tr:hover td { background:var(--surface); }
+  .hist-table .id { color:var(--accent); font-weight:600; }
+  .hist-table .date { color:var(--text-dim); font-size:12px; }
+  .hist-table .num { text-align:right; }
+  .hist-empty { text-align:center; padding:60px 20px; color:var(--text-dim); font-family:"IBM Plex Mono", monospace; font-size:13px; }
+  .hist-empty .big { font-size:18px; color:var(--text); font-family:"Saira Condensed", sans-serif; text-transform:uppercase; font-weight:700; margin-bottom:8px; display:block; }
+  .hist-toolbar { display:flex; justify-content:space-between; align-items:baseline; padding:10px 15px; background:var(--surface-2); border-bottom:1px solid var(--border); font-family:"IBM Plex Mono", monospace; font-size:12px; color:var(--text-dim); }
+  .hist-toolbar .actions { display:flex; gap:8px; align-items:center; }
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <h1>Historial de cortes</h1>
+    <span class="badge">NEPOTIS · MADERABLE</span>
+    <span class="badge" id="envBadge"></span>
+  </div>
+</header>
+<div class="tabs">
+  <button onclick="location.href='/'">← Volver al optimizador</button>
+</div>
+
+<div class="wrap">
+  <div class="card">
+    <div class="hist-toolbar">
+      <span id="histStatus">Cargando…</span>
+      <div class="actions">
+        <span class="muted">Mostrando últimos</span>
+        <select id="histLimit" style="width:auto;padding:4px 8px;font-size:12px">
+          <option value="20">20</option>
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+          <option value="200">200</option>
+        </select>
+        <button class="act btn-ghost btn-sm" onclick="loadHistorial()">↻ Recargar</button>
+      </div>
+    </div>
+    <div id="histBody" style="overflow-x:auto"></div>
+  </div>
+</div>
+
+<script>
+async function loadHistorial() {
+  const status = document.getElementById('histStatus');
+  const body   = document.getElementById('histBody');
+  const limit  = +document.getElementById('histLimit').value || 50;
+  status.textContent = 'Cargando…';
+  status.style.color = '';
+  try {
+    const r = await fetch('/api/cortes?limit=' + limit);
+    if (r.status === 503) {
+      status.textContent = 'Historial no disponible — Supabase no configurado.';
+      status.style.color = 'var(--danger)';
+      body.innerHTML = '<div class="hist-empty">' +
+        '<span class="big">⚙ Pendiente de configurar</span>' +
+        'Pegá SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY en las env vars de Vercel y corré db/001_init.sql en Supabase.' +
+        '</div>';
+      return;
+    }
+    if (!r.ok) {
+      const txt = await r.text().catch(() => '');
+      status.textContent = 'Error ' + r.status;
+      status.style.color = 'var(--danger)';
+      body.innerHTML = '<div class="hist-empty"><span class="big">No pude cargar el historial</span>' + escapeHtml(txt).substring(0, 400) + '</div>';
+      return;
+    }
+    const data = await r.json();
+    const rows = data.rows || [];
+    if (!rows.length) {
+      status.textContent = '0 trabajos';
+      body.innerHTML = '<div class="hist-empty">' +
+        '<span class="big">Todavía no hay trabajos</span>' +
+        'Al confirmar un trabajo en el optimizador, queda registrado acá automáticamente.' +
+        '</div>';
+      return;
+    }
+    status.textContent = rows.length + ' trabajo' + (rows.length === 1 ? '' : 's');
+    status.style.color = 'var(--ok)';
+    body.innerHTML = renderTable(rows);
+  } catch (e) {
+    status.textContent = 'Error de red';
+    status.style.color = 'var(--danger)';
+    body.innerHTML = '<div class="hist-empty"><span class="big">No pude conectar</span>' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function renderTable(rows) {
+  let s = '<table class="hist-table">' +
+    '<thead><tr>' +
+      '<th>ID</th>' +
+      '<th>Fecha</th>' +
+      '<th>Cliente</th>' +
+      '<th>Proyecto</th>' +
+      '<th>Material</th>' +
+      '<th class="num">Espesor</th>' +
+      '<th class="num">Tableros</th>' +
+      '<th class="num">Piezas</th>' +
+      '<th>Por</th>' +
+    '</tr></thead><tbody>';
+  for (const r of rows) {
+    const fecha = r.created_at ? new Date(r.created_at).toLocaleString('es-UY', { dateStyle: 'short', timeStyle: 'short' }) : '';
+    s += '<tr>' +
+      '<td class="id">#' + (r.id ?? '') + '</td>' +
+      '<td class="date">' + escapeHtml(fecha) + '</td>' +
+      '<td>' + escapeHtml(r.cliente || '') + '</td>' +
+      '<td>' + escapeHtml(r.proyecto || '') + '</td>' +
+      '<td>' + escapeHtml(r.material || '') + '</td>' +
+      '<td class="num">' + (r.espesor != null ? r.espesor + ' mm' : '—') + '</td>' +
+      '<td class="num">' + (r.n_tableros ?? '—') + '</td>' +
+      '<td class="num">' + (r.n_piezas ?? '—') + '</td>' +
+      '<td>' + escapeHtml(r.created_by || '—') + '</td>' +
+    '</tr>';
+  }
+  s += '</tbody></table>';
+  return s;
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+document.getElementById('histLimit').addEventListener('change', loadHistorial);
+loadHistorial();
+</script>
+</body>
+</html>
