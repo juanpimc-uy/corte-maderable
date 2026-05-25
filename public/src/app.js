@@ -697,7 +697,14 @@ async function saveCorte(opts) {
     if (!r.ok) {
       const detail = await r.text().catch(() => '');
       console.warn('saveCorte: endpoint respondió', r.status, detail);
-      setStatus(silent ? '💾 historial no disponible' : '💾 error ' + r.status, 'err');
+      // Mostrar mensaje más útil cuando falla en silent mode
+      let short = '💾 historial: error ' + r.status;
+      try {
+        const j = JSON.parse(detail);
+        if (j.error === 'missing_field' && j.field) short = '💾 historial: falta ' + j.field;
+        else if (j.error) short = '💾 ' + j.error;
+      } catch (_) { /* keep default */ }
+      setStatus(short, 'err');
       if (!silent) alert('Error guardando historial: ' + r.status + '\n' + detail);
       return;
     }

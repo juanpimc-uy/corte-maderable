@@ -108,22 +108,23 @@ export default async function handler(req, res) {
     try { body = await readJson(req); }
     catch (e) { return bad(res, 400, 'invalid_json', { detail: e.message }); }
 
-    // Validación mínima.
-    const req_str = ['cliente', 'proyecto', 'material'];
-    for (const k of req_str) {
-      if (typeof body[k] !== 'string' || !body[k].trim()) return bad(res, 400, 'missing_field', { field: k });
-    }
+    // Validación mínima — toleramos cliente/proyecto vacíos (usuario no eligió del MRP).
+    // Lo único que pedimos: arrays no vacíos y parametros.
     if (!Array.isArray(body.tableros) || !body.tableros.length) return bad(res, 400, 'missing_field', { field: 'tableros' });
     if (!Array.isArray(body.piezas)   || !body.piezas.length)   return bad(res, 400, 'missing_field', { field: 'piezas' });
     if (typeof body.parametros !== 'object' || !body.parametros) return bad(res, 400, 'missing_field', { field: 'parametros' });
 
+    const cliStr   = (typeof body.cliente   === 'string' && body.cliente.trim())   || '(sin cliente)';
+    const proyStr  = (typeof body.proyecto  === 'string' && body.proyecto.trim())  || '(sin proyecto)';
+    const matStr   = (typeof body.material  === 'string' && body.material.trim())  || 'MDF';
+
     const row = {
-      cliente:     body.cliente.trim(),
-      proyecto:    body.proyecto.trim(),
+      cliente:     cliStr,
+      proyecto:    proyStr,
       // proyecto_id es text (apunta a public.proyectos_cache.id). cliente_id
       // ya no existe — el MRP no tiene tabla clientes separada.
       proyecto_id: body.proyecto_id == null ? null : String(body.proyecto_id),
-      material:    body.material.trim(),
+      material:    matStr,
       espesor:     body.espesor == null ? null : Number(body.espesor),
       tableros:    body.tableros,
       piezas:      body.piezas,
