@@ -1,7 +1,7 @@
 /* core · validación de límites de máquina NEPOTIS
  *
  * Garantiza que NINGÚN G-code generado mande la fresa fuera del área
- * útil de la mesa (3000 × 2000 mm) ni por debajo del datum Z (Z < 0).
+ * útil de la mesa (X 2000 × Y 3000 mm) ni por debajo del datum Z (Z < 0).
  *
  * Se corre en dos momentos:
  *   1. Antes de optimizar  → validateSheet(): el tablero entra en la mesa.
@@ -14,9 +14,11 @@
  */
 
 export const NEPOTIS_LIMITS = {
-  // Mesa útil de la NEPOTIS.
-  xMin: 0,    xMax: 3000,
-  yMin: 0,    yMax: 2000,
+  // Mesa útil de la NEPOTIS: X corto (2000), Y largo (3000).
+  // El tablero se monta con el LARGO sobre Y y el ANCHO sobre X
+  // (ver core/machine.js — toMachine() hace la rotación).
+  xMin: 0,    xMax: 2000,
+  yMin: 0,    yMax: 3000,
   // Z mínimo: nunca por debajo de cero (la fresa no debe ir más allá
   // del datum / spoilboard).
   zMin: 0,
@@ -29,23 +31,25 @@ export const NEPOTIS_LIMITS = {
 
 /**
  * Verifica que el sheet entre en la mesa, considerando rotación.
+ * sheet: { w: LARGO, h: ANCHO } (como lo carga el usuario).
+ * El montaje estándar es largo→Y (3000) y ancho→X (2000).
  * Devuelve { ok, fits, rotated, error } donde:
- *   - fits = true si el tablero entra en la orientación dada
- *   - rotated = true si SOLO entra rotándolo 90°
+ *   - fits = true si el tablero entra en el montaje estándar
+ *   - rotated = true si SOLO entra invirtiendo largo/ancho
  *   - error = mensaje legible si no entra de ninguna forma
  */
 export function validateSheet(sheet, limits) {
   limits = limits || NEPOTIS_LIMITS;
-  const w = sheet.w, h = sheet.h;
+  const largo = sheet.w, ancho = sheet.h;
   const xRange = limits.xMax - limits.xMin;
   const yRange = limits.yMax - limits.yMin;
-  const fitsDirect  = w <= xRange && h <= yRange;
-  const fitsRotated = h <= xRange && w <= yRange;
+  const fitsDirect  = largo <= yRange && ancho <= xRange;
+  const fitsRotated = ancho <= yRange && largo <= xRange;
   if (fitsDirect)  return { ok: true,  fits: true,  rotated: false };
   if (fitsRotated) return { ok: true,  fits: false, rotated: true,
-    warn: `El tablero ${w}×${h} solo entra rotado 90° (${h}×${w}). Considera invertirlo o usar otra medida.` };
+    warn: `El tablero ${largo}×${ancho} solo entra invirtiendo largo y ancho (cargalo como ${ancho}×${largo}).` };
   return { ok: false, fits: false, rotated: false,
-    error: `El tablero ${w}×${h} mm NO entra en la mesa de la NEPOTIS (${xRange}×${yRange} mm), ni siquiera rotado.` };
+    error: `El tablero ${largo}×${ancho} mm NO entra en la mesa de la NEPOTIS (X ${xRange} × Y ${yRange} mm), ni siquiera girado.` };
 }
 
 /* ---------- validación del G-code ---------- */

@@ -21,6 +21,7 @@
 
 import { optimize } from './core/optimizer.js';
 import { genGcode, genSet } from './core/gcode.js';
+import { toMachine } from './core/machine.js';
 import { SHEETS as SHEETS_INIT } from './data/sheets.js';
 import { mrpConfigured, listClientes, listProyectos, waitForConfig } from './core/mrp.js';
 import { listSheets, createSheet, updateSheet, archiveSheet } from './core/sheets-api.js';
@@ -39,6 +40,16 @@ let CLIENTES = [];                          // [{id, nombre}, ...]
 let PROYECTOS_BY_CLI = {};                  // { [clienteId]: [{id, nombre, cliente_id}, ...] }
 
 const $ = id => document.getElementById(id);
+
+// Límites de mesa efectivos: los defaults de validate.js, overrideables
+// desde los inputs de Parámetros (maxX/maxY, protegidos por el candado).
+function readMachineLimits() {
+  return {
+    ...NEPOTIS_LIMITS,
+    xMax: +($('maxX') && $('maxX').value) || NEPOTIS_LIMITS.xMax,
+    yMax: +($('maxY') && $('maxY').value) || NEPOTIS_LIMITS.yMax,
+  };
+}
 
 // ===== tabs =====
 function tab(t) {
@@ -105,8 +116,15 @@ async function renderSheetsTable() {
   const r = await listSheets(true);  // incluye inactivos así se ven los archivados
   if (!r.ok) {
     setSheetsStatus('Error: ' + (r.error || r.detail || 'desconocido'), 'err');
+    // Caso más probable en prod: la tabla corte.sheets todavía no existe
+    // en Supabase (falta correr db/002_sheets.sql en el SQL Editor).
+    const faltaTabla = r.error === 'supabase_get_failed';
     $('sheetsTable').querySelector('tbody').innerHTML =
-      '<tr><td colspan="5" style="padding:30px;text-align:center;color:var(--text-dim)">No pude cargar tableros del servidor.<br>Si estás en dev local, esto es esperado.</td></tr>';
+      '<tr><td colspan="5" style="padding:30px;text-align:center;color:var(--text-dim)">' +
+      (faltaTabla
+        ? 'No existe la tabla <b>corte.sheets</b> en Supabase.<br>Corré <b>db/002_sheets.sql</b> en el SQL Editor (una sola vez) y reabrí este modal.'
+        : 'No pude cargar tableros del servidor.<br>Si estás en dev local, esto es esperado.') +
+      '</td></tr>';
     return;
   }
   setSheetsStatus(r.rows.length + ' tableros', 'ok');
@@ -470,7 +488,10 @@ function doOptimize() {
   }
 
   // Validar que el tablero entre en la NEPOTIS antes de gastar tiempo optimizando.
-  const sheetCheck = validateSheet(SHEET, NEPOTIS_LIMITS);
+  // Los límites de mesa se leen de los inputs de Parámetros (fallback al default).
+  // OJO semántica: X = eje corto (ancho del tablero, 2000), Y = eje largo (largo, 3000).
+  const limits = readMachineLimits();
+  const sheetCheck = validateSheet(SHEET, limits);
   if (!sheetCheck.ok) { alert(sheetCheck.error); return; }
   if (sheetCheck.warn) {
     if (!confirm(sheetCheck.warn + '\n\n¿Continúo con esta medida?')) return;
@@ -524,12 +545,17 @@ function renderThumbs() {
     '<button class="' + (i === bIdx ? 'on' : '') + '" onclick="gotoBoard(' + i + ')">T' + (i + 1) + '</button>'
   ).join('');
 }
-// opts: { showDims: true }  → agrega cotas del tablero (largo arriba, ancho a la izquierda).
-//                              Solo se usa en el plano impreso, no en la UI.
+// opts: { showDims: true }  → agrega cotas del tablero (ancho arriba, largo a la izquierda).
+// El tablero se dibuja en ORIENTACIÓN MÁQUINA (vertical): igual que queda
+// montado en la NEPOTIS — ancho sobre X (horizontal), largo sobre Y (vertical).
+// La transformación es la misma rotación que usa el G-code (core/machine.js),
+// así que lo que se ve en pantalla es exactamente lo que corta la máquina.
 function svgBoard(b, big, opts) {
   opts = opts || {};
   const showDims = opts.showDims === true;
-  const W = SHEET.w, H = SHEET.h, r = OPT.bit / 2, pad = 14;
+  const m = toMachine(b.parts, SHEET);
+  const parts = m.parts;
+  const W = m.sheet.w, H = m.sheet.h, r = OPT.bit / 2, pad = 14;
   const boardW = big ? 900 : 560;        // ancho útil para dibujar el tablero
   const extraTop  = showDims ? 32 : 0;    // espacio para cota X arriba
   const extraLeft = showDims ? 36 : 0;    // espacio para cota Y a la izquierda
@@ -580,7 +606,7 @@ function svgBoard(b, big, opts) {
     s += '<text x="' + yLineX + '" y="' + yMid + '" text-anchor="middle" dominant-baseline="middle" font-family="IBM Plex Mono" font-size="11" font-weight="600" fill="' + C.dimStr + '" transform="rotate(-90 ' + yLineX + ' ' + yMid + ')">' + H + ' mm</text>';
   }
 
-  b.parts.forEach(p => {
+  parts.forEach(p => {
     const done = big === 'lbl' && LBLDONE[p.code];
     s += '<rect class="pc" data-n="' + p.code + '" x="' + X(p.x) + '" y="' + Y(p.y + p.h) + '" width="' + (p.w * sc) + '" height="' + (p.h * sc) + '" fill="' + (done ? C.pieceDone : C.pieceFill) + '" stroke="' + C.pieceStr + '" stroke-width="1"/>';
     // Trayectoria del centro de fresa: removida por pedido — no agrega valor visual.
@@ -622,6 +648,26 @@ function svgBoard(b, big, opts) {
       }
     }
   });
+  // ----- Marca del origen G54 -----
+  // Círculo amarillo + texto "0,0" en la esquina elegida en Parámetros.
+  // W/H acá ya son las dimensiones en ESPACIO MÁQUINA (vista vertical),
+  // así que las esquinas BL/BR/TL/TR coinciden con las que usa el G-code:
+  //   BL: (0, 0)       — abajo izquierda
+  //   BR: (W, 0)       — abajo derecha
+  //   TL: (0, H)       — arriba izquierda
+  //   TR: (W, H)       — arriba derecha
+  const origen = (OPT && OPT.origen) || ($('origen') && $('origen').value) || 'BL';
+  const cornerMap = { BL: [0, 0], BR: [W, 0], TL: [0, H], TR: [W, H] };
+  const [ox, oy] = cornerMap[origen] || cornerMap.BL;
+  const ocx = X(ox), ocy = Y(oy);
+  // Offset del label para que NO se solape con la pieza si la pieza está pegada al origen
+  const labelDX = origen === 'BR' || origen === 'TR' ? -4 : 4;
+  const labelDY = origen === 'TL' || origen === 'TR' ? -4 : 12;
+  const anchor  = origen === 'BR' || origen === 'TR' ? 'end' : 'start';
+  s += '<circle cx="' + ocx + '" cy="' + ocy + '" r="6" fill="#FFD600" stroke="#15130f" stroke-width="1.5"/>';
+  s += '<circle cx="' + ocx + '" cy="' + ocy + '" r="2" fill="#15130f"/>';
+  s += '<text x="' + (ocx + labelDX) + '" y="' + (ocy + labelDY) + '" font-family="IBM Plex Mono" font-size="11" font-weight="700" fill="#15130f" text-anchor="' + anchor + '">0,0 · G54</text>';
+
   s += '</svg>'; return s;
 }
 
@@ -647,14 +693,20 @@ function pageBoard(d) { bIdx = (bIdx + d + RES.boards.length) % RES.boards.lengt
 function gotoBoard(i) { bIdx = i; renderBig(); }
 
 function confirmGen() {
-  const generated = RES.boards.map(b => genGcode(b.parts, SHEET, OPT, b.n));
+  // G-code en espacio máquina: largo del tablero sobre Y (3000),
+  // ancho sobre X (2000). Ver core/machine.js.
+  const generated = RES.boards.map(b => {
+    const m = toMachine(b.parts, SHEET);
+    return genGcode(m.parts, m.sheet, OPT, b.n);
+  });
 
   // Validar contra límites de la NEPOTIS antes de exponer descargas.
-  const check = validateAllGcodes(generated, NEPOTIS_LIMITS);
+  const gLimits = readMachineLimits();
+  const check = validateAllGcodes(generated, gLimits);
   if (!check.ok) {
     const msg =
       'El G-code generado tiene coordenadas FUERA de los límites de la NEPOTIS ' +
-      '(3000 × 2000 mm, Z ≥ 0). NO se va a permitir descargar hasta corregir.\n\n' +
+      '(X ' + gLimits.xMax + ' × Y ' + gLimits.yMax + ' mm, Z ≥ 0). NO se va a permitir descargar hasta corregir.\n\n' +
       formatViolations(check.violations) +
       '\n\nRevisar: refilado, origen G54, datums Z, dimensiones del tablero.';
     alert(msg);
@@ -662,7 +714,10 @@ function confirmGen() {
   }
 
   GCs = generated;
-  SETs = RES.boards.map(b => genSet(OPT, SHEET, b.parts, b.n));
+  SETs = RES.boards.map(b => {
+    const m = toMachine(b.parts, SHEET);
+    return genSet(OPT, m.sheet, m.parts, b.n);
+  });
   $('gcArea').classList.remove('hide'); $('preConfirm').style.display = 'none';
   $('gc').value = GCs[bIdx]; $('gcBoardLbl').textContent = 'Tablero ' + (bIdx + 1);
   $('gcArea').scrollIntoView({ behavior: 'smooth' });
@@ -967,8 +1022,14 @@ async function loadCorteFromUrl() {
     };
 
     renderP();
-    GCs = RES.boards.map(b => genGcode(b.parts, SHEET, OPT, b.n));
-    SETs = RES.boards.map(b => genSet(OPT, SHEET, b.parts, b.n));
+    GCs = RES.boards.map(b => {
+      const m = toMachine(b.parts, SHEET);
+      return genGcode(m.parts, m.sheet, OPT, b.n);
+    });
+    SETs = RES.boards.map(b => {
+      const m = toMachine(b.parts, SHEET);
+      return genSet(OPT, m.sheet, m.parts, b.n);
+    });
     LBLDONE = {}; bIdx = 0; bIdxL = 0;
     $('t-res').disabled = false; $('t-lbl').disabled = false;
     $('preConfirm').style.display = 'none';

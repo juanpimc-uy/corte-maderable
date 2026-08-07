@@ -4,6 +4,7 @@
 
 import { optimize } from '../public/src/core/optimizer.js';
 import { genGcode, genSet } from '../public/src/core/gcode.js';
+import { toMachine } from '../public/src/core/machine.js';
 import { validateGcode, validateSheet, NEPOTIS_LIMITS } from '../public/src/core/validate.js';
 
 // Sample idéntico a sample() de maqueta v3 línea 462.
@@ -88,8 +89,11 @@ const boardsForGc = res.boards.map((b, bi) => ({
   }),
 }));
 
-const gc0 = genGcode(boardsForGc[0].parts, SHEET, OPT_GC, 1);
-const set0 = genSet(OPT_GC, SHEET, boardsForGc[0].parts, 1);
+// Igual que la app: el G-code se genera en espacio máquina (rotado 90°,
+// largo del tablero sobre Y). Ver core/machine.js.
+const m0 = toMachine(boardsForGc[0].parts, SHEET);
+const gc0 = genGcode(m0.parts, m0.sheet, OPT_GC, 1);
+const set0 = genSet(OPT_GC, m0.sheet, m0.parts, 1);
 
 // Estructura mínima esperada
 const checks = [
@@ -107,24 +111,36 @@ for (const [name, pass] of checks) (pass ? ok : fail)(`gcode: ${name}`);
 
 const setChecks = [
   ['set PROGRAM NUMBER',   /PROGRAM NUMBER=0001/.test(set0)],
-  ['set SHEET dims',       /SHEET=2750 X 1830/.test(set0)],
+  // Orientación máquina: ancho (X) × largo (Y)
+  ['set SHEET dims',       /SHEET=1830 X 2750/.test(set0)],
   ['set bit padded',       /012\.00  FRESA DE CORTE PRINCIPAL/.test(set0)],
 ];
 for (const [name, pass] of setChecks) (pass ? ok : fail)(`set: ${name}`);
 
 // --- Validación de límites de máquina NEPOTIS ---
-console.log('\nValidador NEPOTIS (3000×2000, Z≥0):');
+console.log('\nValidador NEPOTIS (X 2000 × Y 3000, Z≥0):');
 const sheetCheck = validateSheet(SHEET, NEPOTIS_LIMITS);
 if (!sheetCheck.ok) fail(`sheet ${SHEET.w}×${SHEET.h} no entra: ${sheetCheck.error}`);
-else ok(`sheet ${SHEET.w}×${SHEET.h} entra en la mesa`);
+else if (sheetCheck.warn) fail(`sheet ${SHEET.w}×${SHEET.h} con warn inesperado: ${sheetCheck.warn}`);
+else ok(`sheet ${SHEET.w}×${SHEET.h} entra en la mesa (largo→Y, ancho→X)`);
 
 // Todos los G-codes generados deben estar dentro de los límites
 let allClean = true;
 for (let i = 0; i < boardsForGc.length; i++) {
-  const v = validateGcode(genGcode(boardsForGc[i].parts, SHEET, OPT_GC, i + 1), NEPOTIS_LIMITS);
+  const mi = toMachine(boardsForGc[i].parts, SHEET);
+  const v = validateGcode(genGcode(mi.parts, mi.sheet, OPT_GC, i + 1), NEPOTIS_LIMITS);
   if (!v.ok) { allClean = false; fail(`T${i+1} violaciones: ${v.violations.length}`); }
 }
 if (allClean) ok(`los ${boardsForGc.length} programas respetan los límites de la NEPOTIS`);
+
+// Caso negativo: SIN la rotación a espacio máquina, el mismo tablero
+// 2750×1830 debe violar X (2750 > 2000). Esto pesca una regresión donde
+// alguien vuelva a generar G-code en espacio optimizer.
+const gcRaw = genGcode(boardsForGc[0].parts, SHEET, OPT_GC, 1);
+const vRaw = validateGcode(gcRaw, NEPOTIS_LIMITS);
+if (vRaw.ok || !vRaw.violations.some(x => x.axis === 'X'))
+  fail('el validador no detectó X>2000 en G-code sin rotar (espacio optimizer)');
+else ok('sin rotación a máquina, el validador detecta X fuera de rango (como debe ser)');
 
 // Caso negativo: debe detectar Z<0
 const bad = 'N5 X100. Y200. Z-5.\r\nN10 M30';
