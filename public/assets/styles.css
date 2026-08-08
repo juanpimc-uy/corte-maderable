@@ -146,6 +146,17 @@ input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1
 input:disabled, select:disabled { background: var(--surface); color: var(--muted); cursor: not-allowed; }
 input[type=checkbox] { width: auto; accent-color: var(--accent); transform: scale(1.1); }
 
+/* Indicador de orientación de veta bajo los inputs Largo/Ancho del despiece */
+.vetaTag {
+  display: block;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9.5px;
+  letter-spacing: .5px;
+  color: var(--text-dim);
+  margin-top: 2px;
+  user-select: none;
+}
+
 select option { background: var(--surface-2); color: var(--text); }
 
 .grid { display: grid; gap: 11px; }

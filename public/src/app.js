@@ -230,10 +230,12 @@ function renderP() {
     const tr = document.createElement('tr');
     tr.innerHTML =
       '<td><input value="' + p.cod + '" oninput="PCS[' + i + '].cod=this.value" placeholder="' + defCod(i) + '" style="width:80px;text-transform:uppercase"></td>' +
-      '<td><input type="number" value="' + p.largo + '" oninput="PCS[' + i + '].largo=+this.value" style="width:90px"></td>' +
-      '<td><input type="number" value="' + p.ancho + '" oninput="PCS[' + i + '].ancho=+this.value" style="width:90px"></td>' +
+      '<td><input type="number" value="' + p.largo + '" oninput="PCS[' + i + '].largo=+this.value" style="width:90px">' +
+        (p.veta ? '<small class="vetaTag">∥ veta</small>' : '') + '</td>' +
+      '<td><input type="number" value="' + p.ancho + '" oninput="PCS[' + i + '].ancho=+this.value" style="width:90px">' +
+        (p.veta ? '<small class="vetaTag">⊥ veta</small>' : '') + '</td>' +
       '<td><input type="number" value="' + p.qty + '" oninput="PCS[' + i + '].qty=+this.value" style="width:60px"></td>' +
-      '<td style="text-align:center"><input type="checkbox" ' + (p.veta ? 'checked' : '') + ' onchange="PCS[' + i + '].veta=this.checked"></td>' +
+      '<td style="text-align:center"><input type="checkbox" ' + (p.veta ? 'checked' : '') + ' onchange="PCS[' + i + '].veta=this.checked;renderP()"></td>' +
       '<td><input value="' + p.desc + '" oninput="PCS[' + i + '].desc=this.value" placeholder="(opcional)" style="min-width:170px"></td>' +
       '<td><button class="del" onclick="PCS.splice(' + i + ',1);renderP()">×</button></td>';
     tb.appendChild(tr);
