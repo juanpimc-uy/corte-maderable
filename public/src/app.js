@@ -271,6 +271,23 @@ function parseVeta(v) {
   if (['no', 'n', 'false', '0', 'sin', 'sin veta'].includes(s)) return false;
   return true; // default
 }
+// Descarga una plantilla .xlsx con los encabezados EXACTOS que espera
+// onXlsx() y filas de ejemplo, para llenar en planta y reimportar.
+function dlPlantilla() {
+  if (!window.XLSX) { alert('La librería de Excel todavía no cargó. Esperá unos segundos y probá de nuevo.'); return; }
+  const data = [
+    ['Código', 'Largo', 'Ancho', 'Cant', 'Veta', 'Descripción'],
+    ['LAT', 800, 560, 8, 'sí', 'Lateral mueble'],
+    ['EST', 900, 300, 12, 'no', 'Estante'],
+    ['TAP', 1810, 600, 4, 'sí', 'Tapa'],
+  ];
+  const ws = window.XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [{ wch: 10 }, { wch: 9 }, { wch: 9 }, { wch: 6 }, { wch: 6 }, { wch: 26 }];
+  const wb = window.XLSX.utils.book_new();
+  window.XLSX.utils.book_append_sheet(wb, ws, 'Despiece');
+  window.XLSX.writeFile(wb, 'despiece-plantilla.xlsx');
+}
+
 function onXlsx(input) {
   const f = input.files && input.files[0]; if (!f) return;
   const reader = new FileReader();
@@ -497,20 +514,22 @@ function doOptimize() {
   if (!valid.length) { alert('Cargá piezas válidas (largo, ancho, cantidad).'); return; }
 
   // Mínimo de PIEZA (lado menor, parámetro en Parámetros; 0 = sin control).
-  // No bloquea: avisa y pide confirmación. Las piezas chicas pierden
-  // sujeción al liberarse del tablero y pueden salir despedidas; con
-  // tabs activados puede ser aceptable — criterio del operador.
+  // BLOQUEA — decisión de JP (2026-08-08): en planta no se usan tabs, así
+  // que las piezas chicas se sueltan y salen despedidas. Sin excepción por
+  // diálogo; si un trabajo especial lo requiere, se baja el parámetro
+  // "Pieza mínima" en Parámetros (protegido por el candado).
   const minPieza = +($('minPieza') && $('minPieza').value) || 0;
   if (minPieza > 0) {
     const chicas = valid.filter(p => Math.min(+p.largo, +p.ancho) < minPieza);
     if (chicas.length) {
       const det = chicas.map(p => '· ' + p.cod + ' (' + p.largo + '×' + p.ancho + ')').join('\n');
-      const sigo = confirm(
-        'Piezas con lado menor a ' + minPieza + ' mm:\n\n' + det + '\n\n' +
-        'Las piezas chicas pueden soltarse durante el corte y salir despedidas. ' +
-        'Si las vas a cortar igual, considerá activar tabs en Parámetros.\n\n¿Continúo igual?'
+      alert(
+        'NO se puede optimizar: piezas con lado menor a ' + minPieza + ' mm:\n\n' + det + '\n\n' +
+        'Las piezas chicas se sueltan durante el corte y salen despedidas. ' +
+        'Corregí las medidas, o ajustá "Pieza mínima" en Parámetros (candado) si un trabajo especial lo justifica.'
       );
-      if (!sigo) { tab('job'); return; }
+      tab('job');
+      return;
     }
   }
   const s = SHEETS[+$('sheetSel').value];
@@ -1033,7 +1052,7 @@ function closeOvl() { $('ovl').classList.remove('on'); renderLblBoard(); }
 // que sea fácil ver qué entra al window.
 const exposes = {
   PCS, tab, onSheetSel, toggleLock,
-  addP, renderP, sample, onXlsx, doOptimize,
+  addP, renderP, sample, onXlsx, dlPlantilla, doOptimize,
   pageBoard, gotoBoard, confirmGen, dl, dlAll, saveCorte,
   printAllLabels, printNestingPlans,
   pageBoardL, resetLbls, openLbl, closeOvl,
