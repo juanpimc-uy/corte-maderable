@@ -148,12 +148,17 @@ input[type=checkbox] { width: auto; accent-color: var(--accent); transform: scal
 
 /* Indicador de orientación de veta bajo los inputs Largo/Ancho del despiece */
 .vetaTag {
-  display: block;
+  display: inline-block;
   font-family: 'IBM Plex Mono', monospace;
-  font-size: 9.5px;
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: .5px;
-  color: var(--text-dim);
-  margin-top: 2px;
+  color: var(--accent);
+  background: rgba(255, 214, 0, .08);
+  border: 1px solid rgba(255, 214, 0, .35);
+  border-radius: 3px;
+  padding: 1px 6px;
+  margin-top: 4px;
   user-select: none;
 }
 

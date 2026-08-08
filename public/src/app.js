@@ -230,11 +230,11 @@ function renderP() {
     const tr = document.createElement('tr');
     tr.innerHTML =
       '<td><input value="' + p.cod + '" oninput="PCS[' + i + '].cod=this.value" placeholder="' + defCod(i) + '" style="width:80px;text-transform:uppercase"></td>' +
-      '<td><input type="number" value="' + p.largo + '" oninput="PCS[' + i + '].largo=+this.value" style="width:90px">' +
+      '<td><input type="number" min="1" value="' + p.largo + '" oninput="PCS[' + i + '].largo=+this.value" style="width:90px">' +
         (p.veta ? '<small class="vetaTag">∥ veta</small>' : '') + '</td>' +
-      '<td><input type="number" value="' + p.ancho + '" oninput="PCS[' + i + '].ancho=+this.value" style="width:90px">' +
+      '<td><input type="number" min="1" value="' + p.ancho + '" oninput="PCS[' + i + '].ancho=+this.value" style="width:90px">' +
         (p.veta ? '<small class="vetaTag">⊥ veta</small>' : '') + '</td>' +
-      '<td><input type="number" value="' + p.qty + '" oninput="PCS[' + i + '].qty=+this.value" style="width:60px"></td>' +
+      '<td><input type="number" min="1" value="' + p.qty + '" oninput="PCS[' + i + '].qty=+this.value" style="width:60px"></td>' +
       '<td style="text-align:center"><input type="checkbox" ' + (p.veta ? 'checked' : '') + ' onchange="PCS[' + i + '].veta=this.checked;renderP()"></td>' +
       '<td><input value="' + p.desc + '" oninput="PCS[' + i + '].desc=this.value" placeholder="(opcional)" style="min-width:170px"></td>' +
       '<td><button class="del" onclick="PCS.splice(' + i + ',1);renderP()">×</button></td>';
@@ -472,12 +472,47 @@ function doOptimize() {
     return;
   }
 
-  const valid = [];
+  // Filas del despiece: válidas, en blanco (se ignoran), o INVÁLIDAS.
+  // Una fila inválida (negativos, cero, o medidas a medias) BLOQUEA la
+  // optimización con detalle — antes se descartaba en silencio y el
+  // usuario no se enteraba de que esa pieza no entró al cálculo.
+  const valid = [], invalidas = [];
   PCS.forEach((p, i) => {
-    if (+p.largo > 0 && +p.ancho > 0 && +p.qty > 0)
+    const L = +p.largo || 0, A = +p.ancho || 0, Q = +p.qty || 0;
+    const enBlanco = L === 0 && A === 0;
+    if (enBlanco) return;  // fila recién agregada / vacía: se ignora
+    if (L > 0 && A > 0 && Q > 0) {
       valid.push({ ...p, cod: (p.cod && String(p.cod).trim()) ? String(p.cod).trim() : defCod(i) });
+    } else {
+      invalidas.push('· fila ' + (i + 1) + ' (' + ((p.cod && String(p.cod).trim()) || defCod(i)) + '): ' +
+        'largo=' + (L || 'vacío') + ', ancho=' + (A || 'vacío') + ', cant=' + (Q || 'vacío'));
+    }
   });
+  if (invalidas.length) {
+    alert('Hay filas con medidas inválidas (vacías, cero o negativas). ' +
+      'No optimizo hasta que las corrijas o las borres:\n\n' + invalidas.join('\n'));
+    tab('job');
+    return;
+  }
   if (!valid.length) { alert('Cargá piezas válidas (largo, ancho, cantidad).'); return; }
+
+  // Mínimo de PIEZA (lado menor, parámetro en Parámetros; 0 = sin control).
+  // No bloquea: avisa y pide confirmación. Las piezas chicas pierden
+  // sujeción al liberarse del tablero y pueden salir despedidas; con
+  // tabs activados puede ser aceptable — criterio del operador.
+  const minPieza = +($('minPieza') && $('minPieza').value) || 0;
+  if (minPieza > 0) {
+    const chicas = valid.filter(p => Math.min(+p.largo, +p.ancho) < minPieza);
+    if (chicas.length) {
+      const det = chicas.map(p => '· ' + p.cod + ' (' + p.largo + '×' + p.ancho + ')').join('\n');
+      const sigo = confirm(
+        'Piezas con lado menor a ' + minPieza + ' mm:\n\n' + det + '\n\n' +
+        'Las piezas chicas pueden soltarse durante el corte y salir despedidas. ' +
+        'Si las vas a cortar igual, considerá activar tabs en Parámetros.\n\n¿Continúo igual?'
+      );
+      if (!sigo) { tab('job'); return; }
+    }
+  }
   const s = SHEETS[+$('sheetSel').value];
   SHEET = { w: +s.w, h: +s.h, thick: +$('thick').value };
 

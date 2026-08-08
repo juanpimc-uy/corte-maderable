@@ -97,16 +97,17 @@
   <div class="card">
     <div class="h"><span class="ic">⌖</span><h2>Fresa y nesting</h2></div>
     <div class="b">
-      <div class="grid g4 pfield">
+      <div class="grid g5 pfield">
         <div><label>Ø fresa T001 (mm)</label><input id="bit" type="number" value="12" step="0.5"></div>
         <div><label>Separación piezas (mm)</label><input id="space" type="number" value="14"><small class="h">≥ Ø fresa</small></div>
         <div><label>Refilado borde (mm)</label><input id="trim" type="number" value="15"></div>
         <div><label>RPM husillo</label><input id="rpm" type="number" value="18000"></div>
+        <div><label>Pieza mínima (mm)</label><input id="minPieza" type="number" value="100"><small class="h">lado menor — 0 = sin control</small></div>
       </div>
       <div class="grid g5 pfield" style="margin-top:11px">
         <div><label>Mesa máx X (mm)</label><input id="maxX" type="number" value="2000"><small class="h">eje corto — ancho del tablero</small></div>
         <div><label>Mesa máx Y (mm)</label><input id="maxY" type="number" value="3000"><small class="h">eje largo — largo del tablero</small></div>
-        <div><label>Tamaño mín. placa (mm)</label><input id="minSheet" type="number" value="600"><small class="h">no se permite tablero menor</small></div>
+        <div><label>Tablero mínimo (mm)</label><input id="minSheet" type="number" value="600"><small class="h">mín. del TABLERO — no valida piezas</small></div>
         <div style="grid-column:span 2"><label>Origen G54 (esquina datum)</label><select id="origen">
           <option value="BL" selected>Inferior-izquierda (0,0 abajo-izq)</option>
           <option value="BR">Inferior-derecha</option>
