@@ -499,12 +499,51 @@ function doOptimize() {
 
   OPT = readOpt();
   const space = Math.max(+$('space').value, OPT.bit);
-  const res = optimize(
-    valid.map(p => ({ w: +p.largo, h: +p.ancho, qty: +p.qty, veta: !!p.veta, desc: p.desc, cod: String(p.cod).toUpperCase() })),
-    { w: SHEET.w, h: SHEET.h },
-    { kerf: space, trim: +$('trim').value, allowRotate: true }
-  );
-  if (!res.boards.length) { alert('No entran piezas con estos parámetros.'); return; }
+  const trimV = +$('trim').value;
+
+  // Pre-chequeo: cada pieza tiene que entrar en el área útil del tablero.
+  // Mismo criterio que usa el optimizer internamente: al colocar exige
+  // (dim + kerf) <= (tablero - 2*refilado). Si una pieza no entra, el
+  // optimizer de la maqueta crashea con TypeError silencioso — por eso
+  // avisamos ANTES, con nombre y motivo, en vez de dejar morir el botón.
+  const uW = SHEET.w - 2 * trimV - space;   // largo útil
+  const uH = SHEET.h - 2 * trimV - space;   // ancho útil
+  const noEntran = [];
+  valid.forEach(p => {
+    const L = +p.largo, A = +p.ancho;
+    const directo = L <= uW + 1e-6 && A <= uH + 1e-6;
+    const girada  = A <= uW + 1e-6 && L <= uH + 1e-6;
+    if (directo) return;
+    if (girada && !p.veta) return;  // el optimizer la puede rotar
+    noEntran.push(
+      '· ' + p.cod + ' (' + L + '×' + A + ')' +
+      (girada && p.veta ? ' — entraría GIRADA pero tiene VETA marcada (orientación fija)' : '')
+    );
+  });
+  if (noEntran.length) {
+    alert(
+      'Estas piezas NO entran en el tablero ' + SHEET.w + '×' + SHEET.h + ' mm:\n\n' +
+      noEntran.join('\n') + '\n\n' +
+      'Área útil por pieza: ' + uW + '×' + uH + ' mm ' +
+      '(tablero − 2×refilado ' + trimV + ' − separación ' + space + ').\n' +
+      'Corregí la pieza, elegí un tablero más grande, o desmarcá VETA si puede rotarse.'
+    );
+    return;
+  }
+
+  let res;
+  try {
+    res = optimize(
+      valid.map(p => ({ w: +p.largo, h: +p.ancho, qty: +p.qty, veta: !!p.veta, desc: p.desc, cod: String(p.cod).toUpperCase() })),
+      { w: SHEET.w, h: SHEET.h },
+      { kerf: space, trim: trimV, allowRotate: true }
+    );
+  } catch (e) {
+    console.error('optimize() falló:', e);
+    alert('El optimizador falló: ' + e.message + '\n\nRevisá medidas de piezas, refilado y separación. Si persiste, avisale a JP con una captura de este mensaje.');
+    return;
+  }
+  if (!res || !res.boards.length) { alert('No entran piezas con estos parámetros.'); return; }
   const totByCod = {};
   res.boards.forEach(b => b.pl.forEach(pl => { const c = pl.piece.cod; totByCod[c] = (totByCod[c] || 0) + 1; }));
   const seenByCod = {};
