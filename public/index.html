@@ -94,6 +94,7 @@
     <span class="pad" id="padIco">🔒</span>
     <span id="lockMsg">Bloqueado. Estos valores no deberían tocarse en el día a día.</span>
     <button class="act btn-ghost btn-sm" id="lockBtn" onclick="toggleLock()">Editar parámetros</button>
+    <button class="act btn-ghost btn-sm" onclick="resetParams()" title="Borra los parámetros guardados y vuelve a los valores de fábrica">↺ Valores de fábrica</button>
   </div>
   <div class="card">
     <div class="h"><span class="ic">⌖</span><h2>Fresa y nesting</h2></div>
@@ -130,7 +131,7 @@
       </div>
       <div class="grid g5 pfield" style="margin-top:11px">
         <div><label>Prof./pasada</label><input id="pdep" type="number" value="9" step="0.5"><small class="h">solo multipasada</small></div>
-        <div><label>Lead-in rampa</label><input id="lead" type="number" value="15"></div>
+        <div><label>Lead-in rampa (mm)</label><input id="lead" type="number" value="15"><small class="h" id="leadAngle"></small></div>
         <div><label>Feed corte</label><input id="fcut" type="number" value="7999.2" step="0.1"></div>
         <div><label>Feed plunge</label><input id="fplg" type="number" value="4000"></div>
         <div><label>Feed retrac.</label><input id="fret" type="number" value="500"></div>

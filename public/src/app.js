@@ -201,6 +201,52 @@ async function addNewSheetFromModal() {
   await initSheets();
 }
 
+// ===== persistencia de parámetros =====
+// Los valores de la pestaña Parámetros se guardan en localStorage al
+// cambiar y se restauran al abrir la app — pedido de planta: que un
+// trabajo nuevo no vuelva a los defaults de fábrica.
+const PARAMS_KEY = 'corte-maderable-params-v1';
+function paramInputs() { return document.querySelectorAll('#vPar input, #vPar select'); }
+function saveParams() {
+  const o = {};
+  paramInputs().forEach(el => { if (el.id) o[el.id] = el.type === 'checkbox' ? el.checked : el.value; });
+  try { localStorage.setItem(PARAMS_KEY, JSON.stringify(o)); } catch (_) { /* modo incógnito, etc. */ }
+}
+function loadParams() {
+  let o = null;
+  try { o = JSON.parse(localStorage.getItem(PARAMS_KEY) || 'null'); } catch (_) { return; }
+  if (!o) return;
+  paramInputs().forEach(el => {
+    if (el.id && o[el.id] != null) {
+      if (el.type === 'checkbox') el.checked = !!o[el.id];
+      else el.value = o[el.id];
+    }
+  });
+}
+function resetParams() {
+  if (!confirm('¿Volver TODOS los parámetros a los valores de fábrica?')) return;
+  try { localStorage.removeItem(PARAMS_KEY); } catch (_) { /* noop */ }
+  location.reload();
+}
+function initParamsPersistence() {
+  loadParams();
+  paramInputs().forEach(el => el.addEventListener('change', () => { saveParams(); updateLeadHint(); }));
+  updateLeadHint();
+}
+
+// Hint dinámico del ángulo de la rampa de entrada respecto a la mesa:
+// la rampa baja de Z=zclear a Z de corte a lo largo de 'lead' mm en Y,
+// así que el ángulo es atan(zclear / lead).
+function updateLeadHint() {
+  const el = $('leadAngle');
+  if (!el) return;
+  const lead = +($('lead') && $('lead').value) || 0;
+  const zc = +($('zclear') && $('zclear').value) || 0;
+  el.textContent = (lead > 0 && zc > 0)
+    ? ('≈ ' + (Math.atan(zc / lead) * 180 / Math.PI).toFixed(1) + '° respecto a la mesa')
+    : '';
+}
+
 // ===== candado de parámetros =====
 function applyLock() {
   document.querySelectorAll('.pfield input,.pfield select').forEach(e => e.disabled = LOCKED);
@@ -556,6 +602,24 @@ function doOptimize() {
   OPT = readOpt();
   const space = Math.max(+$('space').value, OPT.bit);
   const trimV = +$('trim').value;
+
+  // El refilado no puede ser menor al RADIO de la fresa: el centro de la
+  // fresa corta medio diámetro por FUERA del perímetro de cada pieza, y
+  // las piezas del borde están a 'trim' del borde del tablero. Con
+  // trim < Ø/2 la trayectoria cae en coordenadas negativas (X o Y < 0)
+  // y el validador de límites lo bloquea después con un mensaje críptico
+  // — mejor avisar acá con la causa real.
+  const radioFresa = OPT.bit / 2;
+  if (trimV < radioFresa) {
+    alert(
+      'El refilado (' + trimV + ' mm) es menor al radio de la fresa (' + radioFresa + ' mm).\n\n' +
+      'La fresa corta por fuera del perímetro de las piezas: con este refilado la ' +
+      'trayectoria se sale del tablero a coordenadas negativas y la NEPOTIS no puede ejecutarlo.\n\n' +
+      'Subí el refilado a ' + Math.ceil(radioFresa + 1) + ' mm o más (en Parámetros).'
+    );
+    tab('par');
+    return;
+  }
 
   // Pre-chequeo: cada pieza tiene que entrar en el área útil del tablero.
   // Mismo criterio que usa el optimizer internamente: al colocar exige
@@ -1057,6 +1121,7 @@ const exposes = {
   printAllLabels, printNestingPlans,
   pageBoardL, resetLbls, openLbl, closeOvl,
   openSheetsModal, closeSheetsModal, saveSheetRow, archiveSheetRow, addNewSheetFromModal,
+  resetParams,
 };
 for (const k of Object.keys(exposes)) window[k] = exposes[k];
 // PCS se accede mutable desde inline onchange/oninput, así que lo mantenemos
@@ -1146,6 +1211,7 @@ async function loadCorteFromUrl() {
 
 // ===== init =====
 fillSheets();             // pinta el dropdown con los hardcodeados ya
+initParamsPersistence();  // restaura parámetros guardados + hint de rampa
 applyLock();
 initMRP();                // async — popula clientes/proyectos del MRP en Supabase.
 initSheets();             // async — reemplaza SHEETS con los de Supabase si están.
