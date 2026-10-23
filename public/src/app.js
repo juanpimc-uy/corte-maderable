@@ -230,8 +230,9 @@ function resetParams() {
 }
 function initParamsPersistence() {
   loadParams();
-  paramInputs().forEach(el => el.addEventListener('change', () => { saveParams(); updateLeadHint(); }));
+  paramInputs().forEach(el => el.addEventListener('change', () => { saveParams(); updateLeadHint(); updateToolInfo(); }));
   updateLeadHint();
+  updateToolInfo();
 }
 
 // Hint dinámico del ángulo de la rampa de entrada respecto a la mesa:
@@ -492,15 +493,39 @@ function readClienteProyecto() {
 }
 
 // ===== lectura de parámetros + auto-tabs =====
+// Herramienta elegida en el selector "Cortar con" (T1/T6) y su Ø.
+// Los diámetros viven en Parámetros (ids: bit → T1, bit6 → T6).
+// T6 sin Ø configurado devuelve dia 0 y doOptimize lo bloquea.
+function readTool() {
+  const n = +(($('toolSel') && $('toolSel').value)) || 1;
+  const dia = n === 6
+    ? (+(($('bit6') && $('bit6').value)) || 0)
+    : (+$('bit').value || 0);
+  return { num: n, dia };
+}
+
+// Línea informativa junto al selector: herramienta, Ø y separación
+// efectiva (margen + Ø) — para que el operador vea con qué va a cortar.
+function updateToolInfo() {
+  const el = $('toolInfo');
+  if (!el) return;
+  const t = readTool();
+  const margin = Math.max(0, +(($('pieceMargin') && $('pieceMargin').value)) || 0);
+  el.textContent = t.dia > 0
+    ? ('T' + t.num + ' Ø' + t.dia + ' · separación = ' + margin + ' + ' + t.dia + ' = ' + (margin + t.dia) + ' mm')
+    : ('T' + t.num + ' sin Ø configurado — cargalo en Parámetros');
+}
+
 function readOpt() {
   const cp = readClienteProyecto();
+  const tool = readTool();
   const o = {
     cli: cp.cli, proy: cp.proy,
     cliId: cp.cliId, proyId: cp.proyId,
     // job = nombre corto que va en la cabecera del G-code y en los archivos
     job: shortJob(cp.cli, cp.proy),
     mat: $('mat').value || 'MDF',
-    bit: +$('bit').value, rpm: +$('rpm').value,
+    bit: tool.dia, toolNum: tool.num, rpm: +$('rpm').value,
     zsafe: +$('zsafe').value, zclear: +$('zclear').value,
     ztop: +$('ztop').value, zthru: +$('zthru').value, strat: $('strat').value,
     pdep: +$('pdep').value, lead: +$('lead').value,
@@ -600,7 +625,19 @@ function doOptimize() {
   }
 
   OPT = readOpt();
-  const space = Math.max(+$('space').value, OPT.bit);
+  // Herramienta elegida: sin Ø configurado no se corta.
+  if (!OPT.bit || OPT.bit <= 0) {
+    alert('La herramienta T' + OPT.toolNum + ' no tiene diámetro configurado.\n\n' +
+      'Cargá el Ø de la fresa T' + OPT.toolNum + ' en Parámetros (candado) antes de optimizar.');
+    tab('par');
+    return;
+  }
+
+  // Separación efectiva entre piezas = margen + Ø de la herramienta
+  // elegida (pedido de planta 2026-10-23: la separación depende de la
+  // herramienta con la que se corta, no es un número fijo).
+  const margin = Math.max(0, +(($('pieceMargin') && $('pieceMargin').value)) || 0);
+  const space = margin + OPT.bit;
   const trimV = +$('trim').value;
 
   // El refilado no puede ser menor al RADIO de la fresa: el centro de la
@@ -998,6 +1035,7 @@ function printNestingPlans() {
               escapeHtml(OPT.cli || '(sin cliente)') + ' · ' +
               escapeHtml(OPT.mat || '') + ' ' + SHEET.thick + 'mm · ' +
               SHEET.w + '×' + SHEET.h + ' mm · ' +
+              'T' + (OPT.toolNum || 1) + ' Ø' + OPT.bit + ' · ' +
               today +
             '</div>' +
           '</div>' +
@@ -1121,7 +1159,7 @@ const exposes = {
   printAllLabels, printNestingPlans,
   pageBoardL, resetLbls, openLbl, closeOvl,
   openSheetsModal, closeSheetsModal, saveSheetRow, archiveSheetRow, addNewSheetFromModal,
-  resetParams,
+  resetParams, updateToolInfo,
 };
 for (const k of Object.keys(exposes)) window[k] = exposes[k];
 // PCS se accede mutable desde inline onchange/oninput, así que lo mantenemos

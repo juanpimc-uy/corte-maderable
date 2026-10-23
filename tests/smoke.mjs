@@ -117,6 +117,23 @@ const setChecks = [
 ];
 for (const [name, pass] of setChecks) (pass ? ok : fail)(`set: ${name}`);
 
+// --- Herramienta alternativa (toolNum 6) ---
+// Con toolNum ausente el default es T1 (verificado arriba byte-compatible
+// con la maqueta). Con toolNum 6 cambian Txxx, offset H y comentarios.
+console.log('\nHerramienta T6 (toolNum=6):');
+const OPT_T6 = { ...OPT_GC, toolNum: 6, bit: 6 };
+const gc6 = genGcode(m0.parts, m0.sheet, OPT_T6, 1);
+const set6 = genSet(OPT_T6, m0.sheet, m0.parts, 1);
+const t6Checks = [
+  ['T006 en cabecera',   /T006 \(FRESA DE CORTE T006\)/.test(gc6)],
+  ['G43 H06',            /G43 H06 Z44\./.test(gc6)],
+  ['sin restos de H01',  !/G43 H01/.test(gc6)],
+  ['sin restos de T001', !/T001/.test(gc6.replace(/PART NAME=[^)]*/g, ''))],
+  ['header maqueta T006', /SOLO PERIMETRO T006/.test(gc6)],
+  ['set ENDMILL 006',    /\(  006  ENDMILL  006\.00  FRESA DE CORTE T006 \)/.test(set6)],
+];
+for (const [name, pass] of t6Checks) (pass ? ok : fail)(`t6: ${name}`);
+
 // --- Validación de límites de máquina NEPOTIS ---
 console.log('\nValidador NEPOTIS (X 2000 × Y 3000, Z≥0):');
 const sheetCheck = validateSheet(SHEET, NEPOTIS_LIMITS);

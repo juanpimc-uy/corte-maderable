@@ -40,6 +40,21 @@ export function gf(v) {
 // datum físico de la NEPOTIS está en otra esquina, espejamos las coords.
 // Esto NO cambia el sentido del contorno (lógica anti-horaria intacta);
 // solo la posición absoluta de cada punto en la mesa.
+// Herramienta de corte seleccionada. o.toolNum: 1 (default) | 6.
+// Con toolNum 1 (o ausente) el output queda BYTE-A-BYTE idéntico a la
+// maqueta v3 ("T001", "H01", "FRESA DE CORTE PRINCIPAL") — el diff-test
+// lo garantiza. Para otra herramienta cambian Txxx, el offset G43 Hxx
+// y el nombre en los comentarios.
+function toolInfo(o) {
+  const tn = o.toolNum || 1;
+  return {
+    tn,
+    tnStr: String(tn).padStart(3, '0'),
+    hStr: 'H' + String(tn).padStart(2, '0'),
+    name: tn === 1 ? 'FRESA DE CORTE PRINCIPAL' : 'FRESA DE CORTE T' + String(tn).padStart(3, '0'),
+  };
+}
+
 function makeOriginMappers(sheet, origen) {
   const flipX = origen === 'BR' || origen === 'TR';
   const flipY = origen === 'TL' || origen === 'TR';
@@ -60,6 +75,7 @@ export function genGcode(parts, sheet, o, boardNo) {
   const P = s => { L.push('N' + N + ' ' + s); N += 5; };
   const origen = o.origen || 'BL';
   const { mx, my } = makeOriginMappers(sheet, origen);
+  const tool = toolInfo(o);
 
   L.push('( PART NAME=' + o.job + '-T' + boardNo + ' )');
   L.push('( CLIENTE=' + o.cli + ' )  ( PROYECTO=' + o.proy + ' )');
@@ -68,10 +84,10 @@ export function genGcode(parts, sheet, o, boardNo) {
   // Solo agregamos la línea ORIGEN si NO es BL — así el caso default sigue
   // siendo byte-a-byte igual a la maqueta v3 original.
   if (origen !== 'BL') L.push('( ORIGEN=' + origen + ' )');
-  L.push('( MAQUETA - SOLO PERIMETRO T001 - ' + (o.strat === 'single' ? '1 PASADA PASANTE' : 'MULTIPASADA') + ' - VERIFICAR ANTES DE CORTAR )');
+  L.push('( MAQUETA - SOLO PERIMETRO T' + tool.tnStr + ' - ' + (o.strat === 'single' ? '1 PASADA PASANTE' : 'MULTIPASADA') + ' - VERIFICAR ANTES DE CORTAR )');
 
   P('G54'); P('G54 G90');
-  P('T001 (FRESA DE CORTE PRINCIPAL)'); P('S' + o.rpm + ' M03'); P('G43 H01 Z' + gv(o.zsafe));
+  P('T' + tool.tnStr + ' (' + tool.name + ')'); P('S' + o.rpm + ' M03'); P('G43 ' + tool.hStr + ' Z' + gv(o.zsafe));
 
   let levels = [];
   if (o.strat === 'single') levels = [o.zthru];
@@ -126,6 +142,6 @@ export function genSet(o, sheet, parts, bn) {
     '( SHEET=' + sheet.w + ' X ' + sheet.h + ' )',
     '( TABLERO ' + bn + ' - PIEZAS ' + parts.length + ' )',
     '( GENERADO POR MAQUETA - VERIFICAR )',
-    '(  001  ENDMILL  ' + o.bit.toFixed(2).padStart(6, '0') + '  FRESA DE CORTE PRINCIPAL )',
+    '(  ' + toolInfo(o).tnStr + '  ENDMILL  ' + o.bit.toFixed(2).padStart(6, '0') + '  ' + toolInfo(o).name + ' )',
   ].join('\r\n');
 }

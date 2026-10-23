@@ -81,8 +81,15 @@
       <div style="overflow-x:auto"><table id="tbl"><thead><tr>
         <th>Código</th><th>Largo</th><th>Ancho</th><th>Cant</th><th title="Marcada = orientación fija: largo ∥ veta, ancho ⊥ veta. Desmarcada = el optimizador puede rotar la pieza.">Veta</th><th>Descripción <span style="font-weight:400;text-transform:none">(opcional)</span></th><th></th>
       </tr></thead><tbody></tbody></table></div>
-      <button class="act btn-accent" onclick="doOptimize()" style="margin-top:15px;padding:12px 34px;font-size:16px">▶ Optimizar</button>
-      <span class="muted" style="font-size:12px;margin-left:12px">Primero optimizás y revisás. El G-code se genera después de confirmar.</span>
+      <div style="margin-top:15px;display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap">
+        <div><label>Cortar con</label><select id="toolSel" onchange="updateToolInfo()" style="width:auto;min-width:90px">
+          <option value="1" selected>T1</option>
+          <option value="6">T6</option>
+        </select></div>
+        <button class="act btn-accent" onclick="doOptimize()" style="padding:12px 34px;font-size:16px">▶ Optimizar</button>
+        <span class="muted mono" style="font-size:12px" id="toolInfo"></span>
+      </div>
+      <span class="muted" style="font-size:12px;display:block;margin-top:7px">Primero optimizás y revisás. El G-code se genera después de confirmar.</span>
     </div>
   </div>
 </div>
@@ -99,9 +106,10 @@
   <div class="card">
     <div class="h"><span class="ic">⌖</span><h2>Fresa y nesting</h2></div>
     <div class="b">
-      <div class="grid g5 pfield">
-        <div><label>Ø fresa T001 (mm)</label><input id="bit" type="number" value="12" step="0.5"></div>
-        <div><label>Separación piezas (mm)</label><input id="space" type="number" value="14"><small class="h">≥ Ø fresa</small></div>
+      <div class="grid g6 pfield">
+        <div><label>Ø fresa T1 (mm)</label><input id="bit" type="number" value="12" step="0.5"></div>
+        <div><label>Ø fresa T6 (mm)</label><input id="bit6" type="number" step="0.5" placeholder="—"><small class="h">vacío = T6 deshabilitada</small></div>
+        <div><label>Margen entre piezas (mm)</label><input id="pieceMargin" type="number" value="2" min="0"><small class="h">separación = margen + Ø herramienta</small></div>
         <div><label>Refilado borde (mm)</label><input id="trim" type="number" value="15"></div>
         <div><label>RPM husillo</label><input id="rpm" type="number" value="18000"></div>
         <div><label>Pieza mínima (mm)</label><input id="minPieza" type="number" value="100"><small class="h">lado menor — 0 = sin control</small></div>
